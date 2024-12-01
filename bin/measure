@@ -1,0 +1,245 @@
+#!/usr/bin/env perl
+
+use open qw(:std :utf8);
+use strict;
+use utf8;
+use warnings;
+
+use Cwd;
+use Encode;
+use Getopt::Long qw(:config bundling);
+use IPC::Open3;
+use List::Util qw(max min);
+use POSIX qw(floor strftime WNOHANG);
+use Pod::Usage;
+use Scalar::Util qw(openhandle);
+use Storable;
+use Time::HiRes qw(sleep time);
+
+require "sys/ioctl.ph";
+
+@ARGV = map { decode("utf8", $_) } @ARGV;
+
+my $XDG_STATE_HOME = $ENV{XDG_STATE_HOME} // "$ENV{HOME}/.local/state";
+
+sub EMA {
+    my ($last, $alpha, $x) = @_;
+
+    return $alpha * $x + (1 - $alpha) * $last;
+}
+
+sub quote {
+    my ($s) = @_;
+
+    return "''" unless $s;
+    return $s unless $s =~ m|[^%+,-./:=@\w]|;
+    return "'" . $s =~ s/'/"'"/gr . "'";
+}
+
+sub tput {
+    my ($command) = @_;
+
+    my $size = "";
+    ioctl STDOUT, &TIOCGWINSZ, $size;
+    my ($height, $width) = unpack "S2", $size;
+    return $height if $command eq -lines;
+    return $width if $command eq -cols;
+}
+
+sub tqdm {
+    my (%args) = @_;
+
+    my $ascii = $args{-ascii} // " ▏▎▍▌▋▊▉█";
+    my $desc = $args{-desc} // "";
+    my $initial = $args{-initial} // 0;
+    my $ncols = $args{-ncols} // tput -cols;
+    my $total = $args{-total};
+
+    $desc = "$desc: " if $desc ne "";
+
+    my $bar = $initial <= $total
+        ? do {
+            my $prefix = length "${desc}100%|";
+            my $suffix = length "| [00:00<00:00]";
+            my $width = min max($ncols - $suffix - $prefix, 1), tput -cols;
+
+            my $solid = $initial / $total * $width;
+            my $partial = $solid - int $solid;
+            my $empty = $width - int($solid) - 1;
+
+            my ($back, @fore) = split //, $ascii;
+            @fore = ($back, @fore) unless $solid >= 1;
+
+            sprintf "%s%3d%%|%s%s%s| [%s<%s]",
+                    $desc,
+                    $initial / $total * 100,
+                    $fore[-1] x $solid,
+                    $fore[$partial * @fore],
+                    $back x $empty,
+                    strftime("%M:%S", gmtime floor $initial),
+                    strftime("%M:%S", gmtime floor($total) - floor $initial); }
+        : do {
+            sprintf "%s[%s>%s]",
+                    $desc,
+                    strftime("%M:%S", gmtime floor $initial),
+                    strftime("%M:%S", gmtime floor($initial) - floor $total); };
+
+    printf "\r%-*s", tput(-cols), $bar;
+    STDOUT->flush();
+}
+
+sub error {
+    my ($message) = @_;
+
+    pod2usage -exitval => 1, -message => $message;
+}
+
+=pod
+
+=head1 NAME
+
+measure
+
+=head1 SYNOPSIS
+
+B<measure> [OPTION]... [--] COMMAND [ARGUMENT]...
+
+=head1 OPTIONS
+
+=over
+
+=item -A, --ignore-command-args=[INTEGER]..[INTEGER]
+
+=back
+
+=over
+
+=item -D, --ignore-working-dir
+
+=back
+
+=over
+
+=item -F, --discard-on-failure
+
+=back
+
+=over
+
+=item -d, --description=STRING
+
+=back
+
+=over
+
+=item -h, --help
+
+=back
+
+=over
+
+=item -o, --output=(all|buffered|stdout|stderr|none)
+
+=back
+
+=over
+
+=item -s, --smoothing=RATIONAL
+
+=back
+
+=cut
+
+my $description = "";
+my $discard_on_failure = 0;
+my $help = 0;
+my $ignore_command_args;
+my $ignore_working_dir = 0;
+my $output = "all";
+my $smoothing = 0.75;
+GetOptions("A|ignore-command-args=s" => \$ignore_command_args,
+           "D|ignore-working-dir" => \$ignore_working_dir,
+           "F|discard-on-failure" => \$discard_on_failure,
+           "d|description=s" => \$description,
+           "h|help" => \$help,
+           "o|output=s" => \$output,
+           "s|smoothing=f" => \$smoothing) || error;
+
+pod2usage 0 if $help;
+
+error "Invalid ignore command arguments value: " . quote $ignore_command_args
+if defined($ignore_command_args) &&
+   $ignore_command_args !~ /^(-?\d+)?\.\.(-?\d+)?$/;
+
+error "Unknown output value: " . quote $output
+unless $output =~ /^all|buffered|stdout|stderr|none$/;
+
+error "Option not specified: COMMAND"
+unless @ARGV;
+
+my $working_dir = !$ignore_working_dir? getcwd : "@";
+
+my $command = @ARGV > 1
+    ? do {
+        ($ignore_command_args // "0..0") =~ /^(-?\d+)?\.\.(-?\d+)?$/;
+
+        my $begin = ($1 // 0);
+        $begin += $begin >= 0? 1 : @ARGV;
+
+        my $end = $2 // @ARGV;
+        $end += $end >= 0? 1 : @ARGV;
+
+        my @masked_argv = @ARGV;
+        @masked_argv[$begin..$end - 1] = ("@") x ($end - $begin);
+
+        join " ", map { quote($_) } @masked_argv; }
+    : $ARGV[0];
+
+my $path = "$XDG_STATE_HOME/measure";
+my $state = -e $path? retrieve $path : {};
+$state->{$working_dir} //= {};
+$state->{$working_dir}->{$command} //= 0;
+
+my $ETA = $state->{$working_dir}->{$command};
+
+my $underlying = fork;
+unless ($underlying) {
+    open my $BUFFER, ">";
+    open my $NULL, ">";
+
+    my @list;
+    @list = ("<&STDIN", ">&STDOUT", ">&STDERR", @ARGV) if $output eq "all";
+    @list = ("<&STDIN", $BUFFER,    $BUFFER,    @ARGV) if $output eq "buffered";
+    @list = ("<&STDIN", ">&STDOUT", $NULL,      @ARGV) if $output eq "stdout";
+    @list = ("<&STDIN", $NULL,      ">&STDERR", @ARGV) if $output eq "stderr";
+    @list = ("<&STDIN", $NULL,      $NULL,      @ARGV) if $output eq "none";
+
+    my $pid = open3 @list;
+    my @buffer;
+    () = <$NULL> if openhandle $NULL;
+    @buffer = <$BUFFER> if openhandle $BUFFER;
+    waitpid $pid, 0;
+    print decode "utf8", $_ foreach (@buffer);
+
+    close $NULL;
+    close $BUFFER;
+
+    exit $? >> 8;
+}
+
+my $start = time;
+until (waitpid $underlying, WNOHANG) {
+    tqdm -desc => $description,
+         -initial => time - $start,
+         -total => $ETA;
+    sleep 1 / 32;
+}
+
+my $ATA = time - $start;
+my $error_code = $? >> 8;
+unless ($discard_on_failure && $error_code) {
+    $state->{$working_dir}->{$command} = EMA $ETA, $smoothing, $ATA;
+    store $state, $path;
+}
+
+exit $error_code;
