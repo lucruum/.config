@@ -40,7 +40,7 @@ sub tput {
     my ($command) = @_;
 
     my $size = "";
-    ioctl STDOUT, &TIOCGWINSZ, $size;
+    ioctl STDERR, &TIOCGWINSZ, $size;
     my ($height, $width) = unpack "S2", $size;
     return $height if $command eq -lines;
     return $width if $command eq -cols;
@@ -84,8 +84,7 @@ sub tqdm {
                     strftime("%M:%S", gmtime floor $initial),
                     strftime("%M:%S", gmtime floor($initial) - floor $total); };
 
-    printf "\r%-*s", tput(-cols), $bar;
-    STDOUT->flush();
+    printf STDERR "\r%-*s", tput(-cols), $bar;
 }
 
 sub error {
