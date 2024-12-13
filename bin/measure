@@ -25,6 +25,7 @@ my $XDG_STATE_HOME = $ENV{XDG_STATE_HOME} // "$ENV{HOME}/.local/state";
 sub EMA {
     my ($last, $alpha, $x) = @_;
 
+    return $x unless defined $last;
     return $alpha * $x + (1 - $alpha) * $last;
 }
 
@@ -53,7 +54,7 @@ sub tqdm {
     my $desc = $args{-desc} // "";
     my $initial = $args{-initial} // 0;
     my $ncols = $args{-ncols} // tput -cols;
-    my $total = $args{-total};
+    my $total = $args{-total} // 0;
 
     $desc = "$desc: " if $desc ne "";
 
@@ -197,7 +198,6 @@ my $command = @ARGV > 1
 my $path = "$XDG_STATE_HOME/measure";
 my $state = -e $path? retrieve $path : {};
 $state->{$working_dir} //= {};
-$state->{$working_dir}->{$command} //= 0;
 
 my $ETA = $state->{$working_dir}->{$command};
 
