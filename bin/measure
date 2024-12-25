@@ -58,32 +58,41 @@ sub tqdm {
 
     $desc = "$desc: " if $desc ne "";
 
-    my $bar = $initial <= $total
-        ? do {
-            my $prefix = length "${desc}100%|";
-            my $suffix = length "| [00:00<00:00]";
-            my $width = min max($ncols - $suffix - $prefix, 1), tput -cols;
+    my $prefix = length "${desc}100%|";
+    my $suffix = length "| [00:00<00:00]";
+    my $width = min max($ncols - $suffix - $prefix, 1), tput -cols;
 
-            my $solid = $initial / $total * $width;
-            my $partial = $solid - int $solid;
-            my $empty = $width - int($solid) - 1;
+    my $solid = $total? $initial / $total * $width : 0;
+    my $partial = $solid - int $solid;
+    my $empty = $width - int($solid) - 1;
 
-            my ($back, @fore) = split //, $ascii;
-            @fore = ($back, @fore) unless $solid >= 1;
+    my ($back, @fore) = split //, $ascii;
+    @fore = ($back, @fore) unless $solid >= 1;
 
+    my $actual = strftime("%M:%S", gmtime floor $initial);
+    my $remaining = strftime("%M:%S", gmtime floor($total) - floor $initial);
+    my $excess = strftime("%M:%S", gmtime floor($initial) - floor $total);
+
+    my $bar =
+        $initial < $total? do {
             sprintf "%s%3d%%|%s%s%s| [%s<%s]",
                     $desc,
                     $initial / $total * 100,
                     $fore[-1] x $solid,
                     $fore[$partial * @fore],
                     $back x $empty,
-                    strftime("%M:%S", gmtime floor $initial),
-                    strftime("%M:%S", gmtime floor($total) - floor $initial); }
-        : do {
+                    $actual,
+                    $remaining } :
+        $initial == $total? do {
+            sprintf "%s100%%|%s| [%s<00:00]",
+                    $desc,
+                    $fore[-1] x $solid,
+                    $actual } :
+        do {
             sprintf "%s[%s>%s]",
                     $desc,
-                    strftime("%M:%S", gmtime floor $initial),
-                    strftime("%M:%S", gmtime floor($initial) - floor $total); };
+                    $actual,
+                    $excess };
 
     printf STDERR "\r%-*s", tput(-cols), $bar;
 }
