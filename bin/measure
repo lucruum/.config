@@ -1,0 +1,41 @@
+#!/usr/bin/env perl
+
+use open qw(:std :utf8);
+use strict;
+use utf8;
+use warnings;
+
+use Getopt::Long qw(:config bundling);
+use Pod::Usage;
+
+utf8::decode $_ foreach @ARGV;
+
+sub fatal(;$) {
+    my ($message) = @_;
+
+    print STDERR "$message\n" if defined $message;
+    exit 1;
+}
+
+=pod
+
+=head1 SYNOPSIS
+
+measure [-h]
+
+=head1 OPTIONS
+
+=over
+
+=item -h, --help
+
+Display this help text and exit
+
+=back
+
+=cut
+
+my $help;
+GetOptions "h|help" => \$help or fatal;
+
+pod2usage -verbose => 99, -sections => ".*" if $help;
