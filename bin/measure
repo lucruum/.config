@@ -5,7 +5,10 @@ use strict;
 use utf8;
 use warnings;
 
+use Config qw(%Config);
 use Getopt::Long qw(:config bundling);
+use IPC::Cmd qw(can_run);
+use POSIX;
 use Pod::Usage;
 
 utf8::decode $_ foreach @ARGV;
@@ -17,11 +20,29 @@ sub fatal(;$) {
     exit 1;
 }
 
+sub quote(_) {
+    # См. https://github.com/git/git/blob/master/quote.c: `sq_quote_buf_pretty`
+
+    local ($_) = @_;
+
+    return "''" unless $_;
+    return "'" . s/([!'])/'\\$1'/gr . "'" if /[^_\-,:.@\/^+=\w]/;
+    return $_;
+}
+
+sub sig_name(_) {
+    local ($_) = @_;
+
+    my @signals = split / /, $Config{"sig_name"};
+    return "UNKNOWN" if $_ > $#signals;
+    return "SIG$signals[$_]";
+}
+
 =pod
 
 =head1 SYNOPSIS
 
-measure [-h]
+measure [-h] [--] COMMAND [ARGUMENT]...
 
 =head1 OPTIONS
 
@@ -33,9 +54,41 @@ Display this help text and exit
 
 =back
 
+=head1 Environment
+
+=over
+
+=item SHELL
+
+If the variable `SHELL` exists, the shell forked by `measure` will be that shell.
+If `SHELL` is not set, the Bourne shell is assumed
+
+=back
+
 =cut
 
 my $help;
 GetOptions "h|help" => \$help or fatal;
 
 pod2usage -verbose => 99, -sections => ".*" if $help;
+
+fatal "Option not specified: COMMAND" unless @ARGV;
+my $command = shift @ARGV;
+
+my $shell = $ENV{SHELL} // "/bin/sh";
+fatal "Command not found: $shell" unless can_run $shell;
+
+my $should_pass_to_shell = !@ARGV && $command ne quote $command;
+
+my $child = fork // die "fork: $!";
+unless ($child) {
+    if ($should_pass_to_shell) {
+        exec $shell, "-c", $command or die "exec: $!";
+    }
+    fatal "Command not found: $command" unless can_run $command;
+    exec $command, @ARGV or die "exec: $!";
+}
+die unless wait == $child;
+
+fatal "Died of signal @{[sig_name WTERMSIG $?]}: $command" if WIFSIGNALED $?;
+exit WEXITSTATUS $?;
