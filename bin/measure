@@ -10,8 +10,30 @@ use Getopt::Long qw(:config bundling);
 use IPC::Cmd qw(can_run);
 use POSIX;
 use Pod::Usage;
+use Storable;
+use Time::HiRes qw(sleep time);
+
+my $XDG_STATE_HOME = $ENV{XDG_STATE_HOME} // "$ENV{HOME}/.local/state";
 
 utf8::decode $_ foreach @ARGV;
+
+# См. https://github.com/tqdm/tqdm/blob/master/tqdm/std.py: `EMA`
+my $alpha = 0.3;
+my $last = 0;
+my $calls = 0;
+
+sub ETA() {
+    my $beta = 1 - $alpha;
+    return $calls? $last / (1 - $beta ** $calls) : $last;
+}
+
+sub EMA(;$) {
+    my ($x) = @_;
+
+    my $beta = 1 - $alpha;
+    $last = $alpha * $x + $beta * $last;
+    $calls++;
+}
 
 sub fatal(;$) {
     my ($message) = @_;
@@ -42,7 +64,7 @@ sub sig_name(_) {
 
 =head1 SYNOPSIS
 
-measure [-h] [--] COMMAND [ARGUMENT]...
+measure [-h] [--smoothing SMOOTHING] [--] COMMAND [ARGUMENT]...
 
 =head1 OPTIONS
 
@@ -51,6 +73,16 @@ measure [-h] [--] COMMAND [ARGUMENT]...
 =item -h, --help
 
 Display this help text and exit
+
+=back
+
+=over
+
+=item --smoothing=SMOOTHING
+
+Exponential moving average smoothing factor for speed estimates.
+Ranges from 0 (average speed) to 1 (current/instantaneous speed)
+[default: 0.3]
 
 =back
 
@@ -68,9 +100,12 @@ If `SHELL` is not set, the Bourne shell is assumed
 =cut
 
 my $help;
-GetOptions "h|help" => \$help or fatal;
+GetOptions "h|help" => \$help,
+           "smoothing=f" => \$alpha or fatal;
 
 pod2usage -verbose => 99, -sections => ".*" if $help;
+
+fatal "Invalid smoothing argument: $alpha" unless 0 <= $alpha && $alpha <= 1;
 
 fatal "Option not specified: COMMAND" unless @ARGV;
 my $command = shift @ARGV;
@@ -80,6 +115,16 @@ fatal "Command not found: $shell" unless can_run $shell;
 
 my $should_pass_to_shell = !@ARGV && $command ne quote $command;
 
+my $me = "Command";
+$me .= $should_pass_to_shell
+     ? " " . quote $command
+     : " " . quote join " ", map quote, $command, @ARGV;
+$me .= " executed with " . quote $shell if $should_pass_to_shell;
+
+my $state = "$XDG_STATE_HOME/measure";
+my %image = -f $state? %{retrieve $state or die} : ();
+($alpha, $last, $calls) = $image{$me}->@* if exists $image{$me};
+
 my $child = fork // die "fork: $!";
 unless ($child) {
     if ($should_pass_to_shell) {
@@ -88,7 +133,18 @@ unless ($child) {
     fatal "Command not found: $command" unless can_run $command;
     exec $command, @ARGV or die "exec: $!";
 }
-die unless wait == $child;
+
+my $begin = time;
+until (waitpid $child, WNOHANG) {
+    my $elapsed = time - $begin;
+    printf STDERR "\rElapsed: %.2f, estimated: %.2f", time - $begin, ETA;
+    sleep 1 / 20;
+}
+print STDERR "\n";
+
+EMA time - $begin;
+$image{$me} = [$alpha, $last, $calls];
+store \%image, $state or die;
 
 fatal "Died of signal @{[sig_name WTERMSIG $?]}: $command" if WIFSIGNALED $?;
 exit WEXITSTATUS $?;
