@@ -113,6 +113,7 @@ my $command = shift @ARGV;
 my $shell = $ENV{SHELL} // "/bin/sh";
 fatal "Command not found: $shell" unless can_run $shell;
 
+# @ARGV а не !@ARGV
 my $should_pass_to_shell = !@ARGV && $command ne quote $command;
 
 my $me = "Command";
