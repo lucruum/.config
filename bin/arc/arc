@@ -94,53 +94,76 @@ arc_unshelve() {
 }
 
 #
-# Вспомогательные функции
+# Атрибуты
+#
+# Внутри тела примеси можно разместить специальные конструкции вида
+# `: attribute-name "Attribute value"`
+#
+# Они не влияют на работу программы и позволяют задать произвольно сложные
+# свойства примеси, которые в дальнейшем могут быть использованы, например,
+# для генерации документации или CLI-интерфейса
 #
 
-reflect() {
-    # Внутри тела примеси можно разместить специальные конструкции вида
-    # `: attribute-name "Attribute value"`
-    #
-    # Они не влияют на работу программы и позволяют задать произвольно сложные
-    # свойства примеси, которые в дальнейшем могут быть использованы, например,
-    # для генерации документации или CLI-интерфейса
+each_mixin() {
+    declare -F     \
+    | cut -b 12-   \
+    | grep "^arc_"
+}
 
-    each_mixin() {
-        declare -F     \
-        | cut -b 12-   \
-        | grep "^arc_" \
-        | cut -b 5-
-    }
+each_attr() {
+    local mixin=$2
 
-    each_attr() {
-        local func=arc_$2
+    declare -f $mixin \
+    | awk '{ if ($1 == ":") print $2 }'
+}
 
-        declare -f $func \
-        | awk '{ if ($1 == ":") print $2 }'
-    }
+extract-values() {
+    local attr=$2
+    local mixin=$4
 
-    extract() {
-        local attr=$2
-        local func=arc_$4
-
-        declare -f $func                 \
+    each_value() {
+        declare -f $mixin                    \
         | perl -pe 's/^\s*: '$attr' /die() {
             for it in "\$@"; do
                 echo -n "\$it" | jq -sR
             done
             exit
-        }; die /'                        \
-        | sed "\$ s/$/; $func/"          \
-        | bash                           \
-        | jq -s
+        }; die /'                            \
+        | sed "\$ s/$/; $mixin/"             \
+        | bash
     }
 
-    for func in $(each_mixin); do
-        for attr in $(each_attr of: $func); do
-            extract attr: $attr from: $func \
-            | jq --arg key "$attr" '{$key: .}'
-        done | jq -s --arg func $func 'add | . // {} | {$func: .}'
-    done | jq -s add
+    extract_at() {
+        local at=$1
+
+        each_value       \
+        | sed -n "$at p" \
+        | jq -r
+    }
+
+    extract_into() {
+        local into=$1
+
+        while IFS= read -r; do
+            local entry=$(echo "$REPLY" | jq -r)
+            eval "$into+=('$entry')"
+        done <<< "$(each_value)"
+    }
+
+    local tag=$5
+
+    if [[ $tag == "at:" ]]; then
+        local at=$6
+
+        extract_at $at
+    elif [[ $tag == "into:" ]]; then
+        local into=$6
+
+        extract_into $into
+    else
+        echo "Unknown tag '$tag', must be on of: 'at:', 'into:'"
+        exit 1
+    fi
 }
 
 #
