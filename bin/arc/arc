@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
 
 arc_--() {
-    /usr/bin/arc "$@"
+    local primary_paths=$(which -a arc   \
+                          | grep -v "$0" \
+                          | grep -v "$(realpath "$0")")
+    if [[ -z "$primary_paths" ]]; then
+        echo "arc: primary program 'arc' not found"
+        exit 1
+    fi
+
+    local suggested_primary_path=$(echo "$primary_paths" | head -1)
+    if [[ -z "$ARC_PRIMARY_PATH" ]]; then
+        echo 'arc: path to primary program `ARC_PRIMARY_PATH` is not set'
+        echo "Consider adding \`export ARC_PRIMARY_PATH=$suggested_primary_path\` to your shell configuration file"
+        exit 1
+    fi
+
+    "$ARC_PRIMARY_PATH" "$@"
 }
 
 arc_cane() {

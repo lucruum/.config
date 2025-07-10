@@ -1,7 +1,22 @@
 #!/usr/bin/bash
 
 ya_--() {
-    /usr/bin/ya "$@"
+    local primary_paths=$(which -a ya    \
+                          | grep -v "$0" \
+                          | grep -v "$(realpath "$0")")
+    if [[ -z "$primary_paths" ]]; then
+        echo "ya: primary program 'ya' not found"
+        exit 1
+    fi
+
+    local suggested_primary_path=$(echo "$primary_paths" | head -1)
+    if [[ -z "$YA_PRIMARY_PATH" ]]; then
+        echo 'ya: path to primary program `YA_PRIMARY_PATH` is not set'
+        echo "Consider adding \`export YA_PRIMARY_PATH=$suggested_primary_path\` to your shell configuration file"
+        exit 1
+    fi
+
+    "$YA_PRIMARY_PATH" "$@"
 }
 
 ya_compdb() {
