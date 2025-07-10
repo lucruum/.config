@@ -278,10 +278,8 @@ if ($enabled_warnings{"duplicate-operation"}) {
                     # поэтому при поиске дублирующихся операций мы можем упустить
                     # половину случаев
                     $operation =~ s/_+/_/g;
-                    $image->{$path}->{definitions}->{$operation} = {
-                        line => $line,
-                        column => $column,
-                    };
+                    $image->{$path}->{definitions}->{$operation}->{line} = $line;
+                    $image->{$path}->{definitions}->{$operation}->{column} = $column;
                 }
             }
         }
