@@ -123,19 +123,22 @@ reflect() {
         local attr=$2
         local func=arc_$4
 
-        declare -f $func                                        \
-        | sed "s/: $attr /die() { echo \"\$@\"; exit; }; die /" \
-        | sed "\$ s/$/; $func/"                                 \
-        | bash                                                  \
-        | jq -rsR
+        declare -f $func                 \
+        | perl -pe 's/: '$attr' /die() {
+            for it in "\$@"; do
+                echo -n "\$it" | jq -sR
+            done
+            exit
+        }; die /'                        \
+        | sed "\$ s/$/; $func/"          \
+        | bash                           \
+        | jq -s
     }
 
     for func in $(each_mixin); do
         for attr in $(each_attr of: $func); do
-            jq -n                                                \
-                --arg key "$attr"                                \
-                --arg value "$(extract attr: $attr from: $func)" \
-                '{$key: $value}'
+            extract attr: $attr from: $func \
+            | jq --arg key "$attr" '{$key: .}'
         done | jq -s --arg func $func 'add | . // {} | {$func: .}'
     done | jq -s add
 }
