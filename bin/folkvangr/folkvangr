@@ -11,6 +11,7 @@ use File::Find;
 use File::Temp;
 use FindBin qw($Dir);
 use Getopt::Long qw(:config bundling);
+use IPC::Cmd qw(can_run);
 use JSON::PP;
 use Pod::Usage;
 
@@ -33,13 +34,6 @@ sub quote(_) {
     return "''" unless $_;
     return "'" . s/([!'])/'\\$1'/gr . "'" if /[^_\-,:.@\/^+=\w]/;
     return $_;
-}
-
-sub type(_) {
-    local ($_) = @_;
-
-    `type @{[quote]} > /dev/null 2> /dev/null`;
-    return !$?;
 }
 
 sub syntax_exec($@) {
@@ -203,18 +197,18 @@ fatal "Not an arc repository" unless $arcadia_root;
 @operation_search_paths = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
                            @operation_search_paths);
 
-fatal "git: not found" if !type "git";
-fatal "make not found" if !type "make";
+fatal "git: not found" unless can_run "git";
+fatal "make not found" unless can_run "make";
 fatal "arc: not found\n"
     . "\n"
     . "For more information refer to the documentation:\n"
     . "    https://docs.yandex-team.ru/devtools/intro/quick-start-guide#arc-setup"
-    if !type "arc";
+    unless can_run "arc";
 fatal "ya: not found\n"
     . "\n"
     . "For more information refer to the documentation:\n"
     . "    https://docs.yandex-team.ru/devtools/intro/quick-start-guide#ya-setup"
-    if !type "ya";
+    unless can_run "ya";
 fatal "tree-sitter: not found\n"
     . "\n"
     . "Install the binary by running one of the following commands:\n"
@@ -223,7 +217,7 @@ fatal "tree-sitter: not found\n"
     . "    - `nix-env -iA nixpkgs.tree-sitter`\n"
     . "    - `cargo install --locked tree-sitter-cli`\n"
     . "    - `npm install tree-sitter-cli`"
-    if !type "tree-sitter";
+    unless can_run "tree-sitter";
 
 unless (-f "$Dir/config.json") {
     open my $file, ">", "$Dir/config.json" or die "open: $!";
