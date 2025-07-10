@@ -37,24 +37,34 @@ arc-log() {
 }
 
 arc-drop() {
-    local commit=${1:-HEAD}
+    local commit=$1
 
-    ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/drop/"' \
-    arc rebase -i $commit~1
+    if [[ -z $commit ]]; then
+        arc reset --hard HEAD~
+    else
+        ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/drop/"' \
+        arc rebase -i $commit~
+    fi
 }
 
 arc-edit() {
-    local commit=${1:-HEAD}
+    local commit=$1
 
-    ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/edit/"' \
-    arc rebase -i $commit~1
+    if [[ -n $commit ]]; then
+        ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/edit/"' \
+        arc rebase -i $commit~
+    fi
 }
 
 arc-reword() {
-    local commit=${1:-HEAD}
+    local commit=$1
 
-    ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/reword/"' \
-    arc rebase -i $commit~1
+    if [[ -z $commit ]]; then
+        arc commit --amend
+    else
+        ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/reword/"' \
+        arc rebase -i $commit~
+    fi
 }
 
 arc-show() {
