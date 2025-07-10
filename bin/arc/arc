@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+arc_--() {
+    /usr/bin/arc "$@"
+}
+
+arc_cane() {
+    arc ci -a --amend --no-edit
+}
+
+arc_delta() {
+    arc diff --git "$@" | delta -s --wrap-max-lines=unlimited
+}
+
+arc_tip() {
+    arc show --git "$@" | delta -s --wrap-max-lines=unlimited
+}
+
+arc_drop() {
+    rebase drop "$@"
+}
+
+arc_edit() {
+    rebase edit "$@"
+}
+
+arc_reword() {
+    rebase reword "$@"
+}
+
+rebase() {
+    local command=$1
+    local commit=${2:-HEAD}
+
+    # Аналогично `GIT_SEQUENCE_EDITOR='sed -i "1 s/pick/'$command'/"'`
+    ARC_EDITOR='f() {
+        local path=$1
+
+        if [ "$(basename "$path")" = "arc-rebase-todo" ]; then
+            sed -i "1 s/pick/'$command'/" "$path"
+        else
+            "$(arc config core.editor)" "$path"
+        fi
+    }; f' \
+    arc rebase -i $commit~1
+}
+
+arc() {
+    if declare -F arc_$1 > /dev/null; then
+        arc_"$@"
+    else
+        arc -- "$@"
+    fi
+}
+
+arc "$@"
