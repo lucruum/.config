@@ -112,37 +112,37 @@ each-mixin() {
 }
 
 each-attr() {
-    local mixin=$2
-
-    mixin=arc-$mixin
+    local mixin=arc-$2
 
     declare -f $mixin \
     | awk '{ if ($1 == ":") print $2 }'
 }
 
-collect-values() {
+each-value() {
     local attr=$2
-    local mixin=$4
-    local into=$6
+    local mixin=arc-$4
 
-    mixin=arc-$mixin
+    declare -f $mixin                    \
+    | perl -pe 's/^\s*: '$attr' /die() {
+        for it in "\$@"; do
+            echo -n "\$it" | jq -sR
+        done
+        exit
+    }; die /'                            \
+    | sed "\$ s/$/; $mixin/"             \
+    | bash                               \
+    | jq -rR
+}
 
-    each-value() {
-        declare -f $mixin                    \
-        | perl -pe 's/^\s*: '$attr' /die() {
-            for it in "\$@"; do
-                echo -n "\$it" | jq -sR
-            done
-            exit
-        }; die /'                            \
-        | sed "\$ s/$/; $mixin/"             \
-        | bash
-    }
-
-    while IFS= read -r; do
-        local entry=$(echo "$REPLY" | jq -r)
-        eval "$into+=(${entry@Q})"
-    done <<< "$(each-value)"
+reflect() {
+    for mixin in $(each-mixin); do
+        for attr in $(each-attr of: $mixin); do
+            each-value from: $attr of: $mixin \
+            | jq -s --arg attr "$attr" "{$attr: .}"
+        done \
+        | jq --arg mixin "$mixin" -s 'add | . // {} | {$mixin: .}'
+    done \
+    | jq -s 'add'
 }
 
 #
