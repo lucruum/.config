@@ -5,58 +5,29 @@
 #
 
 begemot---() {
-    "$(arc root)"/alice/nlu/tools/begemot/begemot "$@"
-}
-
-begemot-debug() {
-    arc st
-    arc log -n 1
-
-    DEBUGGER='ya tool gdb' \
-    "$(arc root)/web/daemons/begemot/test_begemot.sh" debug Megamind
+    "$BEGEMOT" "$@"
 }
 
 begemot-run() {
     arc st
     arc log -n 1
-
-    begemot -- run
-}
-
-#
-# Вспомогательные функции
-#
-
-func-exists() {
-    local func=$1
-
-    declare -F $func > /dev/null
+    begemot -- run "$@"
 }
 
 #
 # Точка входа
 #
 
-ensure-begemot-build() {
-    local path=$(arc root)/alice/nlu/tools/begemot/begemot
-
-    if [[ ! -f $path ]]; then
-        ya make -r "$(dirname "$path")"
-    fi
-}
-
 begemot() {
-    if func-exists begemot-$1; then
+    if declare -F begemot-$1 > /dev/null; then
         begemot-"$@"
-    else
-        begemot -- "$@"
+        return
     fi
+
+    begemot -- "$@"
 }
 
-main() {
-    ensure-begemot-build
+export BEGEMOT=$ARCADIA_ROOT/alice/nlu/tools/begemot/begemot
+[[ -f "$BEGEMOT" ]] || ya make -r "$(dirname "$BEGEMOT")"
 
-    begemot "$@"
-}
-
-main "$@"
+begemot "$@"
