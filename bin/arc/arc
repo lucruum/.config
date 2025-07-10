@@ -56,43 +56,6 @@ arc-reword() {
     arc rebase -i $commit~1
 }
 
-arc-swap() {
-    local commit=${1:-HEAD}
-
-    ARC_SEQUENCE_EDITOR='sed -i "1h;1d;2G"' \
-    arc rebase -i $commit~2
-}
-
-arc-shelve() {
-    local message=$(arc show --json | jq -r '.[0].commits[0].message')
-
-    if [[ ! -z "$(arc st -s)" ]]; then
-        arc stash push -um "Working tree changes: $message"
-    fi
-
-    arc reset --soft HEAD~1
-    arc stash push -m "Commit changes: $message"
-}
-
-arc-unshelve() {
-    local message=$(arc show stash@{0} --json         \
-                    | jq -r '.[0].commits[0].message' \
-                    | perl -pe 's/^(.*?): (.*?): // if $. == 1')
-    arc stash pop --index
-    arc commit -am "$message"
-
-    if [[ -z "$(arc stash list)" ]]; then
-        return
-    fi
-    local changes=$(arc show stash@{0} --json         \
-                    | jq -r '.[0].commits[0].message' \
-                    | head -1                         \
-                    | perl -pe 's/^(.*?): (.*?): .*$/\2/')
-    if [[ "$changes" == "Working tree changes" ]]; then
-        arc stash pop --index
-    fi
-}
-
 #
 # Атрибуты
 #
