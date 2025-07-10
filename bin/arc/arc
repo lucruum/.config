@@ -168,20 +168,7 @@ arc() {
         return
     fi
 
-    DECLARED_ARC_EDITOR=$ARC_EDITOR ARC_EDITOR='f() {
-        local path="$1"
-
-        if [ "$ARC_SEQUENCE_EDITOR" ] \
-        && [ "$(basename "$path")" = "arc-rebase-todo" ]; then
-            eval "$ARC_SEQUENCE_EDITOR" "$path"
-        elif [ "$DECLARED_ARC_EDITOR" ]; then
-            eval "$DECLARED_ARC_EDITOR" "$path";
-        elif arc config -l | grep -q "^core.editor"; then
-            eval "$(arc -- config core.editor)" "$path"
-        else
-            vim "$path";
-        fi
-    }; f' arc -- "$@"
+    arc -- "$@"
 }
 
 main() {
