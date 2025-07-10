@@ -111,7 +111,7 @@ sub json_exec($$) {
 
 =head1 SYNOPSIS
 
-folkvangr [OPTION]... [--] PATH...
+folkvangr [-h] [-I DIRECTORY] [-W WARNING] [--] PATH...
 
 =head1 OPTIONS
 
