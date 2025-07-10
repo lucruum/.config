@@ -58,6 +58,17 @@ arc_reword() {
     rebase reword "$@"
 }
 
+arc_swap() {
+    local commit=${1:-HEAD}
+
+    ARC_EDITOR='f() {
+        local path=$1
+
+        sed -i "1h;1d;2G" "$path"
+    }; f' \
+    arc rebase -i $commit~2
+}
+
 rebase() {
     local command=$1
     local commit=${2:-HEAD}
