@@ -8,12 +8,27 @@ arc_cane() {
     arc ci -a --amend --no-edit
 }
 
+arc_diff() {
+    # Патчи, сформированные arc'ом, не соответствуют unified-формату и,
+    # как следствие, несовместимы со многими инструментами
+    arc -- diff --git "$@"
+}
+
+arc_show() {
+    # См. комментарий к `arc_diff`'у
+    arc -- show --git "$@"
+}
+
 arc_delta() {
-    arc diff --git "$@" | delta -s --wrap-max-lines=unlimited
+    arc diff "$@" | delta -s --wrap-max-lines=unlimited
 }
 
 arc_tip() {
-    arc show --git "$@" | delta -s --wrap-max-lines=unlimited
+    arc show "$@" | delta -s --wrap-max-lines=unlimited
+}
+
+arc_apply() {
+    git -C "$(arc root)" apply --no-index "$@"
 }
 
 arc_drop() {
