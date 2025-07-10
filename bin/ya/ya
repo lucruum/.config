@@ -1,0 +1,36 @@
+#!/usr/bin/bash
+
+ya_--() {
+    /usr/bin/ya "$@"
+}
+
+ya_compdb() {
+    ya make -r --add-protobuf-result --force-build-depends "$@"
+    ya dump compile-commands -r "$@" > compile_commands.json
+}
+
+ya_tool_--() {
+    ya -- tool "$@"
+}
+
+ya_tool() {
+    if declare -F ya_tool_$1 > /dev/null; then
+        ya_tool_"$@"
+    else
+        ya tool -- "$@"
+    fi
+}
+
+ya_tool_gdb() {
+    ya tool -- gdb -iex "set auto-load safe-path /" "$@"
+}
+
+ya() {
+    if declare -F ya_$1 > /dev/null; then
+        ya_"$@"
+    else
+        ya -- "$@"
+    fi
+}
+
+ya "$@"
