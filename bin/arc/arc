@@ -142,7 +142,7 @@ extract-values() {
         local at=$1
 
         each_value       \
-        | sed -n "$at p" \
+        | sed -n "$((at + 1)) p" \
         | jq -r
     }
 
