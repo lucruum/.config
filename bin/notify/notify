@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+
+import argparse
+import asyncio
+import pathlib
+
+import psutil
+
+
+async def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", nargs="+", type=pathlib.Path)
+    parser.add_argument("command")
+    args = parser.parse_args()
+
+    while True:
+        process = await asyncio.create_subprocess_shell(args.command)
+
+        mtimes = [it.stat().st_mtime for it in args.file]
+        while [it.stat().st_mtime for it in args.file] == mtimes:
+            await asyncio.sleep(0.5)
+
+        try:
+            parent = psutil.Process(process.pid)
+            for it in parent.children(recursive=True):
+                it.terminate()
+            parent.terminate()
+        except psutil.NoSuchProcess:
+            # Процесс уже завершился
+            pass
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
