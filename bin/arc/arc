@@ -36,25 +36,30 @@ arc_apply() {
 }
 
 arc_drop() {
-    rebase drop "$@"
+    local commit=${1:-HEAD}
+
+    ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/drop/"' \
+    arc rebase -i $commit~1
 }
 
 arc_edit() {
-    rebase edit "$@"
+    local commit=${1:-HEAD}
+
+    ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/edit/"' \
+    arc rebase -i $commit~1
 }
 
 arc_reword() {
-    rebase reword "$@"
+    local commit=${1:-HEAD}
+
+    ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/reword/"' \
+    arc rebase -i $commit~1
 }
 
 arc_swap() {
     local commit=${1:-HEAD}
 
-    ARC_EDITOR='f() {
-        local path=$1
-
-        sed -i "1h;1d;2G" "$path"
-    }; f' \
+    ARC_SEQUENCE_EDITOR='sed -i "1h;1d;2G"' \
     arc rebase -i $commit~2
 }
 
@@ -89,27 +94,6 @@ arc_unshelve() {
 }
 
 #
-# Вспомогательные функции
-#
-
-rebase() {
-    local command=$1
-    local commit=${2:-HEAD}
-
-    # Аналогично `GIT_SEQUENCE_EDITOR='sed -i "1 s/pick/'$command'/"'`
-    ARC_EDITOR='f() {
-        local path=$1
-
-        if [ "$(basename "$path")" = "arc-rebase-todo" ]; then
-            sed -i "1 s/pick/'$command'/" "$path"
-        else
-            "$(arc config core.editor)" "$path"
-        fi
-    }; f' \
-    arc rebase -i $commit~1
-}
-
-#
 # Точка входа
 #
 
@@ -134,9 +118,23 @@ ensure_arc_primary_path_is_set() {
 arc() {
     if declare -F arc_$1 > /dev/null; then
         arc_"$@"
-    else
-        arc -- "$@"
+        return
     fi
+
+    DECLARED_ARC_EDITOR=$ARC_EDITOR ARC_EDITOR='f() {
+        local path="$1"
+
+        if [ "$ARC_SEQUENCE_EDITOR" ] \
+        && [ "$(basename "$path")" = "arc-rebase-todo" ]; then
+            eval "$ARC_SEQUENCE_EDITOR" "$path"
+        elif [ "$DECLARED_ARC_EDITOR" ]; then
+            eval "$DECLARED_ARC_EDITOR" "$path";
+        elif arc config -l | grep -q "^core.editor"; then
+            eval "$(arc -- config core.editor)" "$path"
+        else
+            vim "$path";
+        fi
+    }; f' arc -- "$@"
 }
 
 main() {
