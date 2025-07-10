@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+#
+# Примеси
+#
+
+begemot---() {
+    "$(arc root)"/alice/nlu/tools/begemot/begemot "$@"
+}
+
+begemot-debug() {
+    arc st
+    arc log -n 1
+
+    DEBUGGER='ya tool gdb' \
+    "$(arc root)/web/daemons/begemot/test_begemot.sh" debug Megamind
+}
+
+begemot-run() {
+    arc st
+    arc log -n 1
+
+    begemot -- run
+}
+
+#
+# Вспомогательные функции
+#
+
+func-exists() {
+    local func=$1
+
+    declare -F $func > /dev/null
+}
+
+#
+# Точка входа
+#
+
+ensure-begemot-build() {
+    local path=$(arc root)/alice/nlu/tools/begemot/begemot
+
+    if [[ ! -f $path ]]; then
+        ya make -r "$(dirname "$path")"
+    fi
+}
+
+begemot() {
+    if func-exists begemot-$1; then
+        begemot-"$@"
+    else
+        begemot -- "$@"
+    fi
+}
+
+main() {
+    ensure-begemot-build
+
+    begemot "$@"
+}
+
+main "$@"
