@@ -237,14 +237,15 @@ fatal "Not an arc repository" unless $arcadia_root;
 @operation_search_dirs = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
                           @operation_search_dirs);
 
+my @operation_search_paths;
+find {
+    wanted => sub { push @operation_search_paths, $_ if -f $_ && /\.py$/ },
+    no_chdir => 1 },
+    @operation_search_dirs;
+
 my @emitted_warnings;
 
 if ($enabled_warnings{"duplicate-operation"}) {
-    my @our_operations;
-    find {
-        wanted => sub { push @our_operations, $_ if -f $_ && /\.py$/ },
-        no_chdir => 1 },
-        @operation_search_dirs;
     my $our_operations = syntax_exec '
         (module
             (decorated_definition
@@ -256,7 +257,7 @@ if ($enabled_warnings{"duplicate-operation"}) {
                     (function_definition
                         name: (_) @f
                         (#match? @f "^[^_]"))))',
-        @our_operations;
+        @operation_search_paths;
     $our_operations = json_exec '
         map({(.patterns[].captures[] | select(.name == "f") | .text): .path}) |
         add',
