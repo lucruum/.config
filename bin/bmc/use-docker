@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+quote() {
+    if [[ -z $1 ]]; then
+        echo -n "''"
+    elif [[ $1 =~ [^+,\-./:=@_^[:alnum:]] ]]; then
+        echo -n "'"
+        echo -n "$1" | sed -E 's/(['"'"'!])/'"'"'\\\1'"'"'/g'
+        echo -n "'"
+    else
+        echo -n "$1"
+    fi
+}
+
+usage() {
+    cat <<'EOI'
+Usage:
+    use-docker [-h] IMAGE
+
+    A lightweight wrapper for `docker run` that ensures all build requirements
+    are installed, mounts the working arc repository, and runs a container in
+    the proper environment
+
+Options:
+    -h
+        Print a brief help message
+EOI
+exit 0
+}
+
+fatal() {
+    for it; do
+        echo -en "$it" >&2
+    done
+    (( $# )) && echo >&2
+    exit 1
+}
+
+can-run() {
+    type -fp "$1" > /dev/null
+}
+
+while getopts ":h" OPTION; do
+    case $OPTION in
+        h) usage;;
+        :) fatal "Option requires an argument: $OPTARG";;
+        ?) fatal "Unknown option: $OPTARG";;
+    esac
+done
+
+(( $# )) || fatal "Option not specified: IMAGE"
+image=$1; shift
+[[ $image =~ ^(ai1|cherokee|evb2600|g1|g2|gd1|gd2|my62|my81|mz81|mzb2|navajo|som2600v1)$ ]] ||
+fatal "Unknown image value: $(quote "$image")"
+
+(( !$# )) || fatal "Unexpected option: $(quote "$1")"
+
+can-run "docker" || fatal "Command not found: docker"
+docker ps > /dev/null ||
+fatal "For more information refer to the documentation:\n" \
+      "    https://docs.docker.com/engine/install/linux-postinstall"
+docker run -it --rm busybox sh -c 'ping -c1 -w1 ya.ru > /dev/null' 2> /dev/null ||
+fatal "For more information refer to the documentation:\n" \
+      "    https://docs.yandex-team.ru/qyp/docker-network"
+
+can-run "arc" || fatal "Command not found: arc"
+root=$(arc root)
+(( !$? )) || fatal
+[[ $image =~ ^(cherokee|g2|navajo)$ ]] &&
+    path=$root/hwrnd/openbmc_layer ||
+    path=$root/hwrnd/openbmc
+can-run "findmnt" || fatal "Command not found: findmnt"
+can-run "jq" ||
+can-run "ya" && jq() { ya tool jq "$@"; } ||
+fatal "Command not found: jq"
+findmnt -JT "$path" |
+jq -r '.filesystems[] |
+        select(.source == "arc" and .target == "'$root'") |
+        .options' |
+grep -q "\<\(allow_other\|allow_root\)\>" ||
+fatal "Directory $(quote "$path") is inaccessible from within a Docker container " \
+      "because it is mounted under $(quote "$root"), " \
+      "which lacks the necessary permissions for other users to access files via FUSE.\n" \
+      "Consider remounting $(quote "$root") using the following commands:\n" \
+      "    \$ arc unmount $(quote "$root") && arc mount --allow-other $(quote "$root")"
+
+can-run "git" || fatal "Command not found: git"
+pushd "$path" > /dev/null
+upstream=$(cat upstream_hash)
+git rev-parse --is-inside-work-tree &> /dev/null || git init
+git remote | grep -q "\<origin\>" || git remote add origin "https://github.com/openbmc/openbmc.git"
+[[ $(git rev-parse -q --verify FETCH_HEAD) == $upstream ]] || git fetch --depth=1 origin $upstream
+git reset --hard FETCH_HEAD
+rm ".eslintrc.json"
+rm ".gitignore"
+rm ".gitreview"
+rm -rd ".github/"
+popd > /dev/null
+
+can-run "/usr/bin/arc" || fatal "Command not found: /usr/bin/arc"
+can-run "/usr/bin/yav" || fatal "Command not found: /usr/bin/yav"
+[[ -n $YAV_TOKEN ]] || export YAV_TOKEN=$(yav oauth)
+[[ -n $YAV_TOKEN ]] || fatal "Unable to determine YAV token. Please set the YAV_TOKEN environment variable"
+docker run -it \
+           --rm \
+           -e ARC_DISABLE_TELEMETRY=1 \
+           -e BB_ENV_PASSTHROUGH_ADDITIONS=YAV_TOKEN \
+           -e YAV_TOKEN=$YAV_TOKEN \
+           -v "$HOME/.arc:$HOME/.arc" \
+           -v "$root:$root" \
+           -v "/usr/bin/arc:/usr/bin/arc" \
+           -v "/usr/bin/yav:/usr/bin/yav" \
+           crops/poky:ubuntu-22.04 \
+           --workdir="$path" \
+           sh -c ". ./setup $image; HOME="$path" bash"
