@@ -5,7 +5,7 @@
 #
 
 arc---() {
-    "$ARC_PRIMARY_PATH" "$@"
+    "$ARC" "$@"
 }
 
 arc-cane() {
@@ -60,24 +60,6 @@ arc-reword() {
 # Точка входа
 #
 
-ensure-arc-primary-path-is-set() {
-    local paths=$(which -a arc   \
-                  | grep -v "$0" \
-                  | grep -v "$(realpath "$0")")
-    if [[ -z "$paths" ]]; then
-        echo "arc: primary program 'arc' not found"
-        echo "Consider visiting documentation page at 'https://docs.yandex-team.ru/devtools/intro/quick-start-guide' for more details"
-        exit 1
-    fi
-
-    local suggested_path=$(echo "$paths" | head -1)
-    if [[ -z "$ARC_PRIMARY_PATH" ]]; then
-        echo 'arc: path to primary program `ARC_PRIMARY_PATH` is not set'
-        echo "Consider adding \`export ARC_PRIMARY_PATH=$suggested_path\` to your shell configuration file"
-        exit 1
-    fi
-}
-
 arc() {
     if declare -F arc-$1 > /dev/null; then
         arc-"$@"
@@ -87,10 +69,11 @@ arc() {
     arc -- "$@"
 }
 
-main() {
-    ensure-arc-primary-path-is-set
+export ARC=$(which -a arc | grep -v "$(realpath "$0")" | head -1)
+if [[ -z "$ARC" ]]; then
+    echo "arc: command not found"
+    echo "Consider visiting documentation page at 'https://docs.yandex-team.ru/devtools/intro/quick-start-guide' for more details"
+    exit 1
+fi
 
-    arc "$@"
-}
-
-main "$@"
+arc "$@"
