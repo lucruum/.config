@@ -151,7 +151,7 @@ extract-values() {
 
         while IFS= read -r; do
             local entry=$(echo "$REPLY" | jq -r)
-            eval "$into+=('$entry')"
+            eval "$into+=(${entry@Q})"
         done <<< "$(each_value)"
     }
 
