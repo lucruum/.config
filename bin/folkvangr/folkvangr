@@ -54,13 +54,14 @@ sub syntax_exec($@) {
     die "tree-sitter: Exited abnormally with exit code @{[$? >> 8]}" if $?;
 
     my @table;
+    my $path;
+    my $pattern;
     foreach (@output) {
         if (/^    capture: (\d+ - )?([-.\w]+), start: \((\d+), (\d+)\), end: \((\d+), (\d+)\)(, text: `(.*)`)?$/) {
             my $name = $2;
             my $start = [$3 + 1, $4 + 1];
             my $end = [$5 + 1, $6 + 1];
             my $text = $8 // do {
-                my $path = $table[-1]{path};
                 open my $file, "<", "$path" or die "open: $!";
                 my @lines = <$file>;
                 @lines = @lines[$3..$5];
@@ -68,22 +69,18 @@ sub syntax_exec($@) {
                 $lines[-1] = substr $lines[-1], 0, $6;
                 join "", @lines;
             };
-            push $table[-1]{patterns}[-1]{captures}->@*, {
+            push @table, {
+                path => $path,
+                pattern => $pattern + 0,
                 name => $name,
                 start => $start,
                 end => $end,
                 text => $text,
             };
         } elsif (/^  pattern: (\d+)$/) {
-            push $table[-1]{patterns}->@*, {
-                index => $1,
-                captures => [],
-            };
+            $pattern = $1;
         } else {
-            push @table, {
-                path => $_,
-                patterns => [],
-            };
+            $path = $_;
         }
     }
 
@@ -262,26 +259,20 @@ if ($enabled_warnings{"duplicate-operation"}) {
         @analyzed_paths,
         @operation_search_paths;
 
-    foreach my $row ($rows->@*) {
-        my $path = $row->{path};
-        foreach my $pattern ($row->{patterns}->@*) {
-            my $operation;
-            foreach my $capture ($pattern->{captures}->@*) {
-                my $name = $capture->{name};
-                my $text = $capture->{text};
-                my $line = $capture->{start}->[0];
-                my $column = $capture->{start}->[1];
-                if ($name eq "f") {
-                    $operation = $text;
-                    # См. https://arcanum.yandex-team.ru/review/8934552/details:
-                    # `vh3 import` перестал сжимать подряд идущие "_" в один символ,
-                    # поэтому при поиске дублирующихся операций мы можем упустить
-                    # половину случаев
-                    $operation =~ s/_+/_/g;
-                    $image->{$path}->{definitions}->{$operation}->{line} = $line;
-                    $image->{$path}->{definitions}->{$operation}->{column} = $column;
-                }
-            }
+    foreach ($rows->@*) {
+        my $path = $_->{path};
+        my $name = $_->{name};
+        my $text = $_->{text};
+        my $line = $_->{start}->[0];
+        my $column = $_->{start}->[1];
+        if ($name eq "f") {
+            # См. https://arcanum.yandex-team.ru/review/8934552/details:
+            # `vh3 import` перестал сжимать подряд идущие "_" в один символ,
+            # поэтому при поиске дублирующихся операций мы можем упустить
+            # половину случаев
+            $text =~ s/_+/_/g;
+            $image->{$path}->{definitions}->{$text}->{line} = $line;
+            $image->{$path}->{definitions}->{$text}->{column} = $column;
         }
     }
 }
