@@ -107,11 +107,14 @@ arc_unshelve() {
 each_mixin() {
     declare -F     \
     | cut -b 12-   \
-    | grep "^arc_"
+    | grep "^arc_" \
+    | cut -b 5-
 }
 
 each_attr() {
     local mixin=$2
+
+    mixin=arc_$mixin
 
     declare -f $mixin \
     | awk '{ if ($1 == ":") print $2 }'
@@ -120,6 +123,8 @@ each_attr() {
 extract-values() {
     local attr=$2
     local mixin=$4
+
+    mixin=arc_$mixin
 
     each_value() {
         declare -f $mixin                    \
