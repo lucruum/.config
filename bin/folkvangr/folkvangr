@@ -149,11 +149,21 @@ Enabled by default
 
 =back
 
+=over
+
+=item -Wredundant-argument
+
+Issue a warning when an operation call assigns a keyword argument its default value.
+Enabled by default
+
+=back
+
 =cut
 
 my $help = 0;
 my @operation_search_dirs;
-my %enabled_warnings = ("duplicate-operation" => 1);
+my %enabled_warnings = ("duplicate-operation" => 1,
+                        "redundant-argument" => 1);
 GetOptions "h|help" => \$help,
            "I=s" => \@operation_search_dirs,
            "W=s" => sub {
@@ -171,7 +181,7 @@ foreach (@operation_search_dirs) {
 }
 
 foreach (keys %enabled_warnings) {
-    my @known = qw(duplicate-operation);
+    my @known = qw(duplicate-operation redundant-argument);
     my $known = join "|", @known;
     fatal "Unknown warning value: $_" unless /^($known)$/;
 }
@@ -244,7 +254,8 @@ find {
 my @emitted_warnings;
 
 my $image;
-if ($enabled_warnings{"duplicate-operation"}) {
+if ($enabled_warnings{"duplicate-operation"} ||
+    $enabled_warnings{"redundant-argument"}) {
     my $rows = syntax_exec '
         (module
             (decorated_definition
@@ -255,24 +266,69 @@ if ($enabled_warnings{"duplicate-operation"}) {
                 definition:
                     (function_definition
                         name: (_) @f
-                        (#match? @f "^[^_]"))))',
+                        (#match? @f "^[^_]")
+                        parameters:
+                            (parameters
+                                (typed_default_parameter
+                                    name: (_) @p
+                                    value: (_) @a))?)))
+        (call
+            function: (_) @f
+            arguments:
+                (argument_list
+                    (keyword_argument
+                        name: (_) @p
+                        value: (_) @a)))',
         @analyzed_paths,
         @operation_search_paths;
 
+    my $operation;
+    my $parameter;
+    my $argument;
     foreach ($rows->@*) {
         my $path = $_->{path};
+        my $pattern = $_->{pattern};
         my $name = $_->{name};
         my $text = $_->{text};
         my $line = $_->{start}->[0];
         my $column = $_->{start}->[1];
-        if ($name eq "f") {
-            # См. https://arcanum.yandex-team.ru/review/8934552/details:
-            # `vh3 import` перестал сжимать подряд идущие "_" в один символ,
-            # поэтому при поиске дублирующихся операций мы можем упустить
-            # половину случаев
-            $text =~ s/_+/_/g;
-            $image->{$path}->{definitions}->{$text}->{line} = $line;
-            $image->{$path}->{definitions}->{$text}->{column} = $column;
+
+        # См. https://arcanum.yandex-team.ru/review/8934552/details:
+        # `vh3 import` перестал сжимать подряд идущие "_" в один символ,
+        # поэтому при поиске дублирующихся операций мы можем упустить
+        # половину случаев
+        $operation = $text =~ s/_+/_/gr if $name eq "f";
+
+        if ($pattern == 0) {
+            if ($name eq "f") {
+                $image->{$path}->{definitions}->{$operation}->{line} = $line;
+                $image->{$path}->{definitions}->{$operation}->{column} = $column;
+            } elsif ($name eq "p") {
+                $parameter = $text;
+            } elsif ($name eq "a") {
+                $argument = $text;
+                $image->{$path}->{definitions}->{$operation}->{signature}->{$parameter} = $argument;
+            }
+        } elsif ($pattern == 1) {
+            if ($name eq "f") {
+                my $last_call = $image->{$path}->{calls}->[-1] // {};
+                push $image->{$path}->{calls}->@*, {
+                    operation => $operation,
+                    line => $line,
+                    column => $column,
+                    arguments => {} }
+                    if !$last_call->%* ||
+                       $operation ne $last_call->{operation} &&
+                       $line != $last_call->{line} &&
+                       $column != $last_call->{column};
+            } elsif ($name eq "p") {
+                $parameter = $text;
+            } elsif ($name eq "a") {
+                $argument = $text;
+                $image->{$path}->{calls}->[-1]->{arguments}->{$parameter}->{argument} = $argument;
+                $image->{$path}->{calls}->[-1]->{arguments}->{$parameter}->{line} = $line;
+                $image->{$path}->{calls}->[-1]->{arguments}->{$parameter}->{column} = $column;
+            }
         }
     }
 }
@@ -299,6 +355,30 @@ if ($enabled_warnings{"duplicate-operation"}) {
                 message => "Operation `$operation` is already defined in `$foreign{$operation}`",
                 code => "duplicate-operation" }
                 if exists $foreign{$operation};
+        }
+    }
+}
+
+if ($enabled_warnings{"redundant-argument"}) {
+    my $signature;
+    foreach my $path (@operation_search_paths, @analyzed_paths) {
+        while (my ($operation, $definition) = each $image->{$path}->{definitions}->%*) {
+            $signature->{$operation} = $definition->{signature};
+        }
+    }
+
+    foreach my $path (@analyzed_paths) {
+        foreach my $call ($image->{$path}->{calls}->@*) {
+            while (my ($parameter, $argument) = each $call->{arguments}->%*) {
+                push @emitted_warnings, {
+                    path => $path,
+                    line => $argument->{line},
+                    column => $argument->{column},
+                    message => "Operation call `$call->{operation}` assigns keyword argument `$parameter` its default value",
+                    code => "redundant-argument" }
+                    if exists $signature->{$call->{operation}}->{$parameter} &&
+                       $argument->{argument} eq $signature->{$call->{operation}}->{$parameter};
+            }
         }
     }
 }
