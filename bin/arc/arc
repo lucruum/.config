@@ -8,31 +8,22 @@ arc---() {
     "$ARC" "$@"
 }
 
+arc-apply() {
+    git -C "$(arc root)" apply --no-index "$@"
+}
+
 arc-cane() {
     arc ci -a --amend --no-edit
-}
-
-arc-diff() {
-    # Патч, созданный `arc diff`'ом без флага `--git` воспринимается `git apply`'ем как неправильный
-    # Также delta некорректно разбирает такой патч: каждый файл отображается перемещённым
-    arc -- diff --git "$@"
-}
-
-arc-show() {
-    # См. комментарий к `arc-diff`'у
-    arc -- show --git "$@"
 }
 
 arc-delta() {
     arc diff "$@" | delta -s --wrap-max-lines=unlimited
 }
 
-arc-tip() {
-    arc show "$@" | delta -s --wrap-max-lines=unlimited
-}
-
-arc-apply() {
-    git -C "$(arc root)" apply --no-index "$@"
+arc-diff() {
+    # Патч, созданный `arc diff`'ом без флага `--git` воспринимается `git apply`'ем как неправильный
+    # Также delta некорректно разбирает такой патч: каждый файл отображается перемещённым
+    arc -- diff --git "$@"
 }
 
 arc-drop() {
@@ -54,6 +45,15 @@ arc-reword() {
 
     ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/reword/"' \
     arc rebase -i $commit~1
+}
+
+arc-show() {
+    # См. комментарий к `arc-diff`'у
+    arc -- show --git "$@"
+}
+
+arc-tip() {
+    arc show "$@" | delta -s --wrap-max-lines=unlimited
 }
 
 #
