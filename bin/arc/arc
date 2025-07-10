@@ -188,6 +188,8 @@ using-external-diff() {
                 die "fork: $!" unless defined $child;
                 if (!$child) {
                     dup2 fileno $new_file, fileno STDOUT or die "dup2: $!";
+                    open my $null, ">", "/dev/null" or die "open: $!";
+                    dup2 fileno $null, fileno STDERR or die "dup2: $!";
                     if ($new_hex eq "working tree") {
                         exec "cat", "$root/$path" or die "exec: $!";
                     } elsif ($new_hex eq "index") {
