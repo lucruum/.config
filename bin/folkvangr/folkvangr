@@ -336,6 +336,7 @@ if ($enabled_warnings{"duplicate-operation"} ||
 if ($enabled_warnings{"duplicate-operation"}) {
     my %foreign;
     foreach my $path (@operation_search_paths) {
+        next if grep { $_ eq $path } @analyzed_paths;
         foreach my $operation (keys $image->{$path}->{definitions}->%*) {
             my $module = $path;
             $module =~ s,^$arcadia_root/nirvana/vh3/src/,,;
