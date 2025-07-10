@@ -20,6 +20,11 @@ utf8::decode $_ foreach @ARGV;
 
 my $json = JSON::PP->new->utf8(0);
 
+sub unique(@) {
+    my %seen;
+    return grep { !$seen{$_}++ } @_;
+}
+
 sub fatal(;$) {
     my ($message) = @_;
 
@@ -279,8 +284,7 @@ if ($enabled_warnings{"duplicate-operation"} ||
                     (keyword_argument
                         name: (_) @p
                         value: (_) @a)))',
-        @analyzed_paths,
-        @operation_search_paths;
+        unique @analyzed_paths, @operation_search_paths;
 
     my $operation;
     my $parameter;
