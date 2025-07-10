@@ -57,6 +57,168 @@ arc-tip() {
 }
 
 #
+# Вспомогательные инструменты
+#
+
+using-external-diff() {
+    perl - arc command "$@" <<'EOI'
+        use strict;
+        use warnings;
+
+        use File::Basename;
+        use File::Temp;
+        use Getopt::Long qw(:config pass_through);
+        use POSIX qw(:sys_wait_h dup2);
+        use Term::ANSIColor qw(colorstrip);
+
+        # Ограничиваемся запуском переданной команды,
+        # если выполнение внешнего diff'а не разрешено
+        my $ext_diff = 0;
+        GetOptions "ext-diff!" => \$ext_diff;
+        exec @ARGV or die "exec: $!" unless $ext_diff;
+
+        my $root = `arc root 2> /dev/null`;
+        chomp $root;
+
+        # Перенаправляем поток вывода в pager
+        my $paging = -t STDOUT;
+        if ($paging) {
+            pipe my $input, my $output or die "pipe: $!";
+            my $child = fork;
+            die "fork: $!" unless defined $child;
+            if (!$child) {
+                dup2 fileno $input, fileno STDIN or die "dup2: $!";
+                close $input or die "close: $!";
+                close $output or die "close: $!";
+                # См. `arc help env`
+                my $pager = $ENV{ARC_PAGER} ||
+                            `arc config core.pager 2> /dev/null` ||
+                            $ENV{PAGER} ||
+                            'less -FRX';
+                exec "sh", "-c", $pager or die "exec: $!";
+            }
+            close $input or die "close: $!";
+            dup2 fileno $output, fileno STDOUT or die "dup2: $!";
+            close $output or die "close: $!";
+            END {
+                # Повторная отправка сигнала SIGINT
+                # может привести к некорректному завершению pager'а
+                # и, как следствие, к графическим артефактам
+                $SIG{INT} = "IGNORE";
+                close STDOUT or die "close: $!";
+                waitpid $child, 0 or die "waitpid: $!" if $paging;
+            }
+        }
+
+        # Перенаправляем поток ввода в arc
+        {
+            pipe my $input, my $output or die "pipe: $!";
+            my $child = fork;
+            die "fork: $!" unless defined $child;
+            if (!$child) {
+                close $input or die "close: $!";
+                dup2 fileno $output, fileno STDOUT or die "dup2: $!";
+                close $output or die "close: $!";
+                # Не стоит удивляться тому, что вывод не раскрашен: флаг не работает
+                splice @ARGV, 3, 0, "--color=always" if $paging;
+                exec @ARGV or die "exec: $!";
+            }
+            dup2 fileno $input, fileno STDIN or die "dup2: $!";
+            close $input or die "close: $!";
+            close $output or die "close: $!";
+            END {
+                close STDIN or die "close: $!";
+                waitpid $child, 0 or die "waitpid: $!";
+            }
+        }
+
+        # Убиваем фильтр (см. ниже), переходим к выполнению `END`-блоков
+        $SIG{INT} = sub { exit; };
+
+        # Фильтр: заменяем unified diff'ы на собственные
+        my $drop;
+        my ($path, $old_file, $old_hex, $new_file, $new_hex);
+        while (<STDIN>) {
+            my $pretty = $_;
+            $_ = colorstrip $_;
+
+            # Убираем патч
+            $drop = $2 + $4 + 2 if /^@@ -(\d+,)?(\d+) \+(\d+,)?(\d+)/;
+            $drop -= 2 - /^[-+]/, next if $drop;
+            print($pretty), next unless /^(---|\+\+\+)/;
+
+            # Форматы `arc diff`'а и `arc log`'а отличаются - приводим их к одному виду
+            my $revision = qr/[0-9a-f]{40}|index|working tree/;
+            my $source = /\t\($revision\)$/ && "diff" || "log";
+            if ($source eq "diff") {
+                s/\t\(($revision)\)$/ ($1)/;
+            } else {
+                my $is_quoted = /^... "/;
+                s/"(.*)"/sprintf "%s", $1/e if $is_quoted;
+                s|^(...) [ab]/|$1 |;
+            }
+
+            # Заполняем передаваемые в diff переменные
+            die unless /^(---|\+\+\+) (.*) \((.*)\)$/;
+            my $change = $1;
+            $path = $2;
+            $new_hex = $3;
+            $new_file = File::Temp->new(SUFFIX => "_" . $path =~ s|/|_|gr);
+            if ($path ne "/dev/null") {
+                my $child = fork;
+                die "fork: $!" unless defined $child;
+                if (!$child) {
+                    dup2 fileno $new_file, fileno STDOUT or die "dup2: $!";
+                    if ($new_hex eq "working tree") {
+                        exec "cat", "$root/$path" or die "exec: $!";
+                    } elsif ($new_hex eq "index") {
+                        exec "arc", "show", ":$path" or die "exec: $!";
+                    } else {
+                        exec "arc", "show", "$new_hex:$path" or die "exec: $!";
+                    }
+                }
+                waitpid $child, 0 or die "waitpid: $!";
+            }
+            $new_hex = 0 x 40 unless $new_hex =~ /^.{40}$/;
+            ($old_file, $old_hex) = ($new_file, $new_hex) if $change eq "---";
+
+            # Вызываем внешний diff
+            if ($change eq "+++") {
+                my $child = fork;
+                die "fork: $!" unless defined $child;
+                if (!$child) {
+                    # См. https://github.com/git/git/commit/6e9af863ee:
+                    # diff'ы могут ориентироваться на наличие этой переменной при использовании цветов:
+                    # https://github.com/Wilfred/difftastic/blob/master/src/options.rs
+                    $ENV{GIT_PAGER_IN_USE} = "true" if $paging;
+                    # См. `GIT_EXTERNAL_DIFF` на https://github.com/git/git/blob/master/Documentation/git.adoc
+                    $ENV{ARC_EXTERNAL_DIFF} //= 'f() {
+                        # Флаги взял из документации к ядру:
+                        # https://www.kernel.org/doc/html/v4.17/process/submitting-patches.html#diff-up
+                        diff -up "$2" "$5";
+                        return 0;
+                    }; f';
+                    exec "sh", "-c", $ENV{ARC_EXTERNAL_DIFF} . ' "$@"',
+                                     $ENV{ARC_EXTERNAL_DIFF},
+                                     $path,
+                                     $old_file,
+                                     $old_hex,
+                                     100644,
+                                     $new_file,
+                                     $new_hex,
+                                     100644 or die "exec: $!";
+                }
+                waitpid $child, 0 or die "waitpid: $!";
+                if (WIFEXITED $? and WEXITSTATUS $?) {
+                    print "fatal: external diff died, stopping at $path\n";
+                    exit 128;
+                }
+            }
+        }
+EOI
+}
+
+#
 # Точка входа
 #
 
