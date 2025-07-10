@@ -234,7 +234,7 @@ foreach ("tree-sitter/tree-sitter-python") {
     my $parser = basename $_;
     my $dir = "$Dir/$parser";
     my $lib = "$dir/lib$parser.so";
-    system "git", "clone", "https://github.com/$_" unless -d $dir;
+    system "git", "clone", "https://github.com/$_", "$Dir/$parser" unless -d $dir;
     die "git: Exited abnormally with code @{[$? >> 8]}" if $?;
     system "make", "-C", $dir unless -f $lib;
     die "make: Exited abnormally with code @{[$? >> 8]}" if $?;
