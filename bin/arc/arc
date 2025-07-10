@@ -6,6 +6,7 @@ ensure_arc_primary_path_is_set() {
                   | grep -v "$(realpath "$0")")
     if [[ -z "$paths" ]]; then
         echo "arc: primary program 'arc' not found"
+        echo "Consider visiting documentation page at 'https://docs.yandex-team.ru/devtools/intro/quick-start-guide' for more details"
         exit 1
     fi
 
