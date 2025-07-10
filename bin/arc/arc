@@ -57,58 +57,6 @@ arc-reword() {
 }
 
 #
-# Атрибуты
-#
-# Внутри тела примеси можно разместить специальные конструкции вида
-# `: attribute-name "Attribute value"`
-#
-# Они не влияют на работу программы и позволяют задать произвольно сложные
-# свойства примеси, которые в дальнейшем могут быть использованы, например,
-# для генерации документации или CLI-интерфейса
-#
-
-each-mixin() {
-    declare -F     \
-    | cut -b 12-   \
-    | grep "^arc-" \
-    | cut -b 5-
-}
-
-each-attr() {
-    local mixin=arc-$2
-
-    declare -f $mixin \
-    | awk '{ if ($1 == ":") print $2 }'
-}
-
-each-value() {
-    local attr=$2
-    local mixin=arc-$4
-
-    declare -f $mixin                    \
-    | perl -pe 's/^\s*: '$attr' /die() {
-        for it in "\$@"; do
-            echo -n "\$it" | jq -sR
-        done
-        exit
-    }; die /'                            \
-    | sed "\$ s/$/; $mixin/"             \
-    | bash                               \
-    | jq -rR
-}
-
-reflect() {
-    for mixin in $(each-mixin); do
-        for attr in $(each-attr of: $mixin); do
-            each-value from: $attr of: $mixin \
-            | jq -s --arg attr "$attr" "{$attr: .}"
-        done \
-        | jq --arg mixin "$mixin" -s 'add | . // {} | {$mixin: .}'
-    done \
-    | jq -s 'add'
-}
-
-#
 # Точка входа
 #
 
