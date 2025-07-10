@@ -187,16 +187,6 @@ foreach (@analyzed_paths) {
     $_ = abs_path $_;
 }
 
-my $arcadia_root = $ENV{ARCADIA} ||
-                   $ENV{ARCADIA_PATH} ||
-                   $ENV{ARCADIA_ROOT} ||
-                   `arc root 2> /dev/null`;
-chomp $arcadia_root;
-fatal "Not an arc repository" unless $arcadia_root;
-
-@operation_search_dirs = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
-                          @operation_search_dirs);
-
 fatal "git: not found" unless can_run "git";
 fatal "make not found" unless can_run "make";
 fatal "arc: not found\n"
@@ -236,6 +226,16 @@ foreach ("tree-sitter/tree-sitter-python") {
     system "make", "-C", $dir unless -f $lib;
     die "make: Exited abnormally with code @{[$? >> 8]}" if $?;
 }
+
+my $arcadia_root = $ENV{ARCADIA} ||
+                   $ENV{ARCADIA_PATH} ||
+                   $ENV{ARCADIA_ROOT} ||
+                   `arc root 2> /dev/null`;
+chomp $arcadia_root;
+fatal "Not an arc repository" unless $arcadia_root;
+
+@operation_search_dirs = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
+                          @operation_search_dirs);
 
 my @emitted_warnings;
 
