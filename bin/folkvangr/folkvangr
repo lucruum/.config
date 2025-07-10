@@ -235,8 +235,8 @@ my $arcadia_root = $ENV{ARCADIA} ||
 chomp $arcadia_root;
 fatal "Not an arc repository" unless $arcadia_root;
 
-@operation_search_dirs = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
-                          @operation_search_dirs);
+@operation_search_dirs = (@operation_search_dirs,
+                          "$arcadia_root/nirvana/vh3/src/vh3/lib");
 
 my @operation_search_paths;
 find {
