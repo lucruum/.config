@@ -246,8 +246,9 @@ find {
 
 my @emitted_warnings;
 
+my $image;
 if ($enabled_warnings{"duplicate-operation"}) {
-    my $our_operations = syntax_exec '
+    my $rows = syntax_exec '
         (module
             (decorated_definition
                 (decorator
@@ -258,50 +259,50 @@ if ($enabled_warnings{"duplicate-operation"}) {
                     (function_definition
                         name: (_) @f
                         (#match? @f "^[^_]"))))',
+        @analyzed_paths,
         @operation_search_paths;
-    $our_operations = json_exec '
-        map({(.patterns[].captures[] | select(.name == "f") | .text): .path}) |
-        add',
-        $our_operations;
 
-    my $my_operations = syntax_exec '
-        (decorated_definition
-            (decorator
-                (call
-                    function: (_) @d
-                    (#match? @d "vh3.decorator.(composite_|external_)?operation")))
-            definition:
-                (function_definition
-                    name: (_) @f))',
-        @analyzed_paths;
-    $my_operations = json_exec '
-        map(
-            .path as $path |
-            .patterns[].captures[] | select(.name == "f") |
-            {path: $path, line: .start[0], column: .start[1], operation: .text}
-        )',
-        $my_operations;
+    foreach my $row ($rows->@*) {
+        my $path = $row->{path};
+        foreach my $pattern ($row->{patterns}->@*) {
+            foreach my $capture ($pattern->{captures}->@*) {
+                my $name = $capture->{name};
+                my $text = $capture->{text};
+                my $line = $capture->{start}->[0];
+                my $column = $capture->{start}->[1];
+                if ($name eq "f") {
+                    $image->{$path}->{definitions}->{$text} = {
+                        line => $line,
+                        column => $column,
+                    };
+                }
+            }
+        }
+    }
+}
 
-    foreach ($my_operations->@*) {
-        my $path = $_->{path};
-        my $line = $_->{line};
-        my $column = $_->{column};
-        my $operation = $_->{operation};
-
-        my $definition = $our_operations->{$operation};
-        if (defined $definition && $definition ne $path) {
-            my $module = $definition;
+if ($enabled_warnings{"duplicate-operation"}) {
+    my %foreign;
+    foreach my $path (@operation_search_paths) {
+        foreach my $operation (keys $image->{$path}->{definitions}->%*) {
+            my $module = $path;
             $module =~ s,^$arcadia_root/nirvana/vh3/src/,,;
             $module =~ s,^$arcadia_root/,,;
             $module =~ s,\.py$,,;
             $module =~ s,/,.,g;
+            $foreign{$operation} = $module;
+        }
+    }
 
+    foreach my $path (@analyzed_paths) {
+        while (my ($operation, $definition) = each $image->{$path}->{definitions}->%*) {
             push @emitted_warnings, {
                 path => $path,
-                line => $line,
-                column => $column,
-                message => "Operation `$operation` is already defined in `$module`",
-                code => "duplicate-operation"};
+                line => $definition->{line},
+                column => $definition->{column},
+                message => "Operation `$operation` is already defined in `$foreign{$operation}`",
+                code => "duplicate-operation" }
+                if exists $foreign{$operation};
         }
     }
 }
