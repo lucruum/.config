@@ -151,17 +151,7 @@ Each of these warning options also has a negative form beginning with `-Wno-` to
 
 =over
 
-=item -Wlib-operation
-
-Issue a warning when an operation is already defined in `vh3.lib`.
-This warning helps to clean up the code from redundant operations after running `ya tool vh3 import` with `--no-lib-operations` flag.
-Enabled by default
-
-=back
-
-=over
-
-=item -Wdefined-operation
+=item -Wduplicate-operation
 
 Issue a warning when an operation is already defined somewhere in the operation search paths.
 Enabled by default
@@ -172,8 +162,7 @@ Enabled by default
 
 my $help = 0;
 my @operation_search_paths;
-my %enabled_warnings = ("lib-operation" => 1,
-                        "defined-operation" => 1);
+my %enabled_warnings = ("duplicate-operation" => 1);
 GetOptions "h|help" => \$help,
            "I=s" => \@operation_search_paths,
            "W=s" => sub {
@@ -191,7 +180,7 @@ foreach (@operation_search_paths) {
 }
 
 foreach (keys %enabled_warnings) {
-    my @known = qw(lib-operation defined-operation);
+    my @known = qw(duplicate-operation);
     my $known = join "|", @known;
     fatal "Unknown warning value: $_" unless /^($known)$/;
 }
@@ -210,6 +199,9 @@ my $arcadia_root = $ENV{ARCADIA} ||
                    `arc root 2> /dev/null`;
 chomp $arcadia_root;
 fatal "Not an arc repository" unless $arcadia_root;
+
+@operation_search_paths = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
+                           @operation_search_paths);
 
 fatal "git: not found" if !type "git";
 fatal "make not found" if !type "make";
@@ -253,70 +245,7 @@ foreach ("tree-sitter/tree-sitter-python") {
 
 my @emitted_warnings;
 
-if ($enabled_warnings{"lib-operation"}) {
-    my @lib_operations;
-    find {
-        wanted => sub { push @lib_operations, $_ if -f $_ && /\.py$/ },
-        no_chdir => 1 },
-        "$arcadia_root/nirvana/vh3/src/vh3/lib";
-    my $lib_operations = syntax_exec '
-        (module
-            (decorated_definition
-                (decorator
-                    (call
-                        function: (_) @d
-                        (#match? @d "vh3.decorator.(composite_|external_)?operation")))
-                definition:
-                    (function_definition
-                        name: (_) @f
-                        (#match? @f "^[^_]"))))',
-        @lib_operations;
-    $lib_operations = json_exec '
-        map({(.patterns[].captures[] | select(.name == "f") | .text): .path}) |
-        add',
-        $lib_operations;
-
-    my $my_operations = syntax_exec '
-        (decorated_definition
-            (decorator
-                (call
-                    function: (_) @d
-                    (#match? @d "vh3.decorator.(composite_|external_)?operation")))
-            definition:
-                (function_definition
-                    name: (_) @f))',
-        @analyzed_paths;
-    $my_operations = json_exec '
-        map(
-            .path as $path |
-            .patterns[].captures[] | select(.name == "f") |
-            {path: $path, line: .start[0], column: .start[1], operation: .text}
-        )',
-        $my_operations;
-
-    foreach ($my_operations->@*) {
-        my $path = $_->{path};
-        my $line = $_->{line};
-        my $column = $_->{column};
-        my $operation = $_->{operation};
-
-        if (exists $lib_operations->{$operation}) {
-            my $module = $lib_operations->{$operation};
-            $module =~ s,^$arcadia_root/nirvana/vh3/src/,,;
-            $module =~ s,\.py$,,;
-            $module =~ s,/,.,g;
-
-            push @emitted_warnings, {
-                path => $path,
-                line => $line,
-                column => $column,
-                message => "Operation `$operation` is already defined in `$module`",
-                code => "lib-operation"};
-        }
-    }
-}
-
-if ($enabled_warnings{"defined-operation"}) {
+if ($enabled_warnings{"duplicate-operation"}) {
     my @our_operations;
     find {
         wanted => sub { push @our_operations, $_ if -f $_ && /\.py$/ },
@@ -366,6 +295,7 @@ if ($enabled_warnings{"defined-operation"}) {
         my $definition = $our_operations->{$operation};
         if (defined $definition && $definition ne $path) {
             my $module = $definition;
+            $module =~ s,^$arcadia_root/nirvana/vh3/src/,,;
             $module =~ s,^$arcadia_root/,,;
             $module =~ s,\.py$,,;
             $module =~ s,/,.,g;
@@ -375,7 +305,7 @@ if ($enabled_warnings{"defined-operation"}) {
                 line => $line,
                 column => $column,
                 message => "Operation `$operation` is already defined in `$module`",
-                code => "defined-operation"};
+                code => "duplicate-operation"};
         }
     }
 }
