@@ -1,58 +1,59 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
-ya_--() {
-    local primary_paths=$(which -a ya    \
-                          | grep -v "$0" \
-                          | grep -v "$(realpath "$0")")
-    if [[ -z "$primary_paths" ]]; then
-        echo "ya: primary program 'ya' not found"
-        exit 1
-    fi
+#
+# Примеси
+#
 
-    local suggested_primary_path=$(echo "$primary_paths" | head -1)
-    if [[ -z "$YA_PRIMARY_PATH" ]]; then
-        echo 'ya: path to primary program `YA_PRIMARY_PATH` is not set'
-        echo "Consider adding \`export YA_PRIMARY_PATH=$suggested_primary_path\` to your shell configuration file"
-        exit 1
-    fi
-
-    "$YA_PRIMARY_PATH" "$@"
+ya---() {
+    "$YA" "$@"
 }
 
-ya_compdb() {
+ya-compdb() {
     ya make -r --add-protobuf-result --force-build-depends "$@"
     ya dump compile-commands -r "$@" > compile_commands.json
 }
 
-ya_tool_--() {
+ya-tool---() {
     ya -- tool "$@"
 }
 
-ya_tool() {
-    if declare -F ya_tool_$1 > /dev/null; then
-        ya_tool_"$@"
+ya-tool() {
+    if declare -F ya-tool-$1 > /dev/null; then
+        ya-tool-"$@"
     else
         ya tool -- "$@"
     fi
 }
 
-ya_tool_cs() {
+ya-tool-cs() {
     # Не очень понятно, зачем вообще было ограничивать количество совпадений и
     # длину выводимых строк, если вывод `cs` будет отсматриваться `grep`'ом,
     # `fzf`'ом или чем-то похожим
     ya tool -- cs -g inf -m inf -t -W $((2 ** 32 - 1)) "$@"
 }
 
-ya_tool_gdb() {
+ya-tool-gdb() {
     ya tool -- gdb -iex "set auto-load safe-path /" "$@"
 }
 
+#
+# Точка входа
+#
+
 ya() {
-    if declare -F ya_$1 > /dev/null; then
-        ya_"$@"
-    else
-        ya -- "$@"
+    if declare -F ya-$1 > /dev/null; then
+        ya-"$@"
+        return
     fi
+
+    ya -- "$@"
 }
+
+export YA=$(which -a ya | grep -v "$(realpath "$0")" | head -1)
+if [[ -z "$YA" ]]; then
+    echo "ya: command not found"
+    echo "Consider visiting documentation page at 'https://docs.yandex-team.ru/devtools/intro/quick-start-guide' for more details"
+    exit 1
+fi
 
 ya "$@"
