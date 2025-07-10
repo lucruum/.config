@@ -124,7 +124,7 @@ reflect() {
         local func=arc_$4
 
         declare -f $func                 \
-        | perl -pe 's/: '$attr' /die() {
+        | perl -pe 's/^\s*: '$attr' /die() {
             for it in "\$@"; do
                 echo -n "\$it" | jq -sR
             done
