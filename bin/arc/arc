@@ -8,22 +8,20 @@ arc-command() {
     "$ARC" "$@"
 }
 
-arc-apply() {
-    git -C "$(arc root)" apply --no-index "$@"
-}
-
 arc-cane() {
     arc ci -a --amend --no-edit
 }
 
 arc-delta() {
-    arc diff "$@" | delta -s --wrap-max-lines=unlimited
+    arc command diff --git "$@" | delta -s --wrap-max-lines=unlimited
 }
 
 arc-diff() {
-    # Патч, созданный `arc diff`'ом без флага `--git` воспринимается `git apply`'ем как неправильный
-    # Также delta некорректно разбирает такой патч: каждый файл отображается перемещённым
-    arc command diff --git "$@"
+    using-external-diff diff "$@"
+}
+
+arc-log() {
+    using-external-diff log "$@"
 }
 
 arc-drop() {
@@ -48,12 +46,11 @@ arc-reword() {
 }
 
 arc-show() {
-    # См. комментарий к `arc-diff`'у
-    arc command show --git "$@"
+    using-external-diff show "$@"
 }
 
 arc-tip() {
-    arc show "$@" | delta -s --wrap-max-lines=unlimited
+    arc command show --git "$@" | delta -s --wrap-max-lines=unlimited
 }
 
 #
