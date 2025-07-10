@@ -184,6 +184,7 @@ my @analyzed_paths = @ARGV;
 foreach (@analyzed_paths) {
     fatal "Not a file: $_" if -e && !-f;
     fatal "No such file or directory: $_" unless -e;
+    fatal "Not a Python file: $_" unless /\.py$/;
     $_ = abs_path $_;
 }
 
