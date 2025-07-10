@@ -163,7 +163,7 @@ Enabled by default
 
 =item -Wdefined-operation
 
-Issue a warning when an operation is already defined somewhere in the include paths.
+Issue a warning when an operation is already defined somewhere in the operation search paths.
 Enabled by default
 
 =back
@@ -171,39 +171,45 @@ Enabled by default
 =cut
 
 my $help = 0;
-my %warnings = ("lib-operation" => 1,
-                "defined-operation" => 1);
-my @include_paths;
+my @operation_search_paths;
+my %enabled_warnings = ("lib-operation" => 1,
+                        "defined-operation" => 1);
 GetOptions "h|help" => \$help,
-           "I=s" => \@include_paths,
+           "I=s" => \@operation_search_paths,
            "W=s" => sub {
                my ($name, $value) = @_;
-               my $enabled = $value !~ /^no-/;
-               $value =~ s/^no-//;
-               $warnings{$value} = $enabled; }
+               my $disabled = $value =~ s/^no-//;
+               $enabled_warnings{$value} = !$disabled; }
            or fatal;
 
 pod2usage -verbose => 99, -sections => ".*" if $help;
 
-foreach (@include_paths) {
+foreach (@operation_search_paths) {
     fatal "Not a directory: $_" if -e && !-d;
     fatal "No such file or directory: $_" unless -e;
     $_ = abs_path $_;
 }
 
-foreach (keys %warnings) {
+foreach (keys %enabled_warnings) {
     my @known = qw(lib-operation defined-operation);
     my $known = join "|", @known;
     fatal "Unknown warning value: $_" unless /^($known)$/;
 }
 
 fatal "Option not specified: PATH" unless @ARGV;
-my @paths = @ARGV;
-foreach (@paths) {
+my @analyzed_paths = @ARGV;
+foreach (@analyzed_paths) {
     fatal "Not a file: $_" if -e && !-f;
     fatal "No such file or directory: $_" unless -e;
     $_ = abs_path $_;
 }
+
+my $arcadia_root = $ENV{ARCADIA} ||
+                   $ENV{ARCADIA_PATH} ||
+                   $ENV{ARCADIA_ROOT} ||
+                   `arc root 2> /dev/null`;
+chomp $arcadia_root;
+fatal "Not an arc repository" unless $arcadia_root;
 
 fatal "git: not found" if !type "git";
 fatal "make not found" if !type "make";
@@ -245,16 +251,9 @@ foreach ("tree-sitter/tree-sitter-python") {
     die "make: Exited abnormally with code @{[$? >> 8]}" if $?;
 }
 
-my $arcadia_root = $ENV{ARCADIA} ||
-                   $ENV{ARCADIA_PATH} ||
-                   $ENV{ARCADIA_ROOT} ||
-                   `arc root 2> /dev/null`;
-chomp $arcadia_root;
-fatal "Not an arc repository" unless $arcadia_root;
+my @emitted_warnings;
 
-my @warnings;
-
-if ($warnings{"lib-operation"}) {
+if ($enabled_warnings{"lib-operation"}) {
     my @lib_operations;
     find {
         wanted => sub { push @lib_operations, $_ if -f $_ && /\.py$/ },
@@ -286,7 +285,7 @@ if ($warnings{"lib-operation"}) {
             definition:
                 (function_definition
                     name: (_) @f))',
-        @paths;
+        @analyzed_paths;
     $my_operations = json_exec '
         map(
             .path as $path |
@@ -307,7 +306,7 @@ if ($warnings{"lib-operation"}) {
             $module =~ s,\.py$,,;
             $module =~ s,/,.,g;
 
-            push @warnings, {
+            push @emitted_warnings, {
                 path => $path,
                 line => $line,
                 column => $column,
@@ -317,13 +316,13 @@ if ($warnings{"lib-operation"}) {
     }
 }
 
-if ($warnings{"defined-operation"}) {
-    my @defined_operations;
+if ($enabled_warnings{"defined-operation"}) {
+    my @our_operations;
     find {
-        wanted => sub { push @defined_operations, $_ if -f $_ && /\.py$/ },
+        wanted => sub { push @our_operations, $_ if -f $_ && /\.py$/ },
         no_chdir => 1 },
-        @include_paths;
-    my $defined_operations = syntax_exec '
+        @operation_search_paths;
+    my $our_operations = syntax_exec '
         (module
             (decorated_definition
                 (decorator
@@ -334,11 +333,11 @@ if ($warnings{"defined-operation"}) {
                     (function_definition
                         name: (_) @f
                         (#match? @f "^[^_]"))))',
-        @defined_operations;
-    $defined_operations = json_exec '
+        @our_operations;
+    $our_operations = json_exec '
         map({(.patterns[].captures[] | select(.name == "f") | .text): .path}) |
         add',
-        $defined_operations;
+        $our_operations;
 
     my $my_operations = syntax_exec '
         (decorated_definition
@@ -349,7 +348,7 @@ if ($warnings{"defined-operation"}) {
             definition:
                 (function_definition
                     name: (_) @f))',
-        @paths;
+        @analyzed_paths;
     $my_operations = json_exec '
         map(
             .path as $path |
@@ -364,14 +363,14 @@ if ($warnings{"defined-operation"}) {
         my $column = $_->{column};
         my $operation = $_->{operation};
 
-        my $defined_path = $defined_operations->{$operation};
-        if (defined $defined_path && $defined_path ne $path) {
-            my $module = $defined_path;
+        my $definition = $our_operations->{$operation};
+        if (defined $definition && $definition ne $path) {
+            my $module = $definition;
             $module =~ s,^$arcadia_root/,,;
             $module =~ s,\.py$,,;
             $module =~ s,/,.,g;
 
-            push @warnings, {
+            push @emitted_warnings, {
                 path => $path,
                 line => $line,
                 column => $column,
@@ -381,11 +380,11 @@ if ($warnings{"defined-operation"}) {
     }
 }
 
-@warnings = sort {
+@emitted_warnings = sort {
     $a->{path} cmp $b->{path} ||
     $a->{line} <=> $b->{line} ||
     $a->{column} <=> $b->{column} ||
     $a->{code} cmp $b->{code} }
-    @warnings;
+    @emitted_warnings;
 print "$_->{path}:$_->{line}:$_->{column}: $_->{message} [-W$_->{code}]\n"
-foreach @warnings;
+foreach @emitted_warnings;
