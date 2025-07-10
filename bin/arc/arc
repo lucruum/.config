@@ -94,6 +94,53 @@ arc_unshelve() {
 }
 
 #
+# Вспомогательные функции
+#
+
+reflect() {
+    # Внутри тела примеси можно разместить специальные конструкции вида
+    # `: attribute-name "Attribute value"`
+    #
+    # Они не влияют на работу программы и позволяют задать произвольно сложные
+    # свойства примеси, которые в дальнейшем могут быть использованы, например,
+    # для генерации документации или CLI-интерфейса
+
+    each_mixin() {
+        declare -F     \
+        | cut -b 12-   \
+        | grep "^arc_" \
+        | cut -b 5-
+    }
+
+    each_attr() {
+        local func=arc_$2
+
+        declare -f $func \
+        | awk '{ if ($1 == ":") print $2 }'
+    }
+
+    extract() {
+        local attr=$2
+        local func=arc_$4
+
+        declare -f $func                                        \
+        | sed "s/: $attr /die() { echo \"\$@\"; exit; }; die /" \
+        | sed "\$ s/$/; $func/"                                 \
+        | bash                                                  \
+        | jq -rsR
+    }
+
+    for func in $(each_mixin); do
+        for attr in $(each_attr of: $func); do
+            jq -n                                                \
+                --arg key "$attr"                                \
+                --arg value "$(extract attr: $attr from: $func)" \
+                '{$key: $value}'
+        done | jq -s --arg func $func 'add | . // {} | {$func: .}'
+    done | jq -s add
+}
+
+#
 # Точка входа
 #
 
