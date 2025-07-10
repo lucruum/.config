@@ -4,66 +4,66 @@
 # Примеси
 #
 
-arc_--() {
+arc---() {
     "$ARC_PRIMARY_PATH" "$@"
 }
 
-arc_cane() {
+arc-cane() {
     arc ci -a --amend --no-edit
 }
 
-arc_diff() {
+arc-diff() {
     # Патч, созданный `arc diff`'ом без флага `--git` воспринимается `git apply`'ем как неправильный
     # Также delta некорректно разбирает такой патч: каждый файл отображается перемещённым
     arc -- diff --git "$@"
 }
 
-arc_show() {
-    # См. комментарий к `arc_diff`'у
+arc-show() {
+    # См. комментарий к `arc-diff`'у
     arc -- show --git "$@"
 }
 
-arc_delta() {
+arc-delta() {
     arc diff "$@" | delta -s --wrap-max-lines=unlimited
 }
 
-arc_tip() {
+arc-tip() {
     arc show "$@" | delta -s --wrap-max-lines=unlimited
 }
 
-arc_apply() {
+arc-apply() {
     git -C "$(arc root)" apply --no-index "$@"
 }
 
-arc_drop() {
+arc-drop() {
     local commit=${1:-HEAD}
 
     ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/drop/"' \
     arc rebase -i $commit~1
 }
 
-arc_edit() {
+arc-edit() {
     local commit=${1:-HEAD}
 
     ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/edit/"' \
     arc rebase -i $commit~1
 }
 
-arc_reword() {
+arc-reword() {
     local commit=${1:-HEAD}
 
     ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/reword/"' \
     arc rebase -i $commit~1
 }
 
-arc_swap() {
+arc-swap() {
     local commit=${1:-HEAD}
 
     ARC_SEQUENCE_EDITOR='sed -i "1h;1d;2G"' \
     arc rebase -i $commit~2
 }
 
-arc_shelve() {
+arc-shelve() {
     local message=$(arc show --json | jq -r '.[0].commits[0].message')
 
     if [[ ! -z "$(arc st -s)" ]]; then
@@ -74,7 +74,7 @@ arc_shelve() {
     arc stash push -m "Commit changes: $message"
 }
 
-arc_unshelve() {
+arc-unshelve() {
     local message=$(arc show stash@{0} --json         \
                     | jq -r '.[0].commits[0].message' \
                     | perl -pe 's/^(.*?): (.*?): // if $. == 1')
@@ -104,29 +104,30 @@ arc_unshelve() {
 # для генерации документации или CLI-интерфейса
 #
 
-each_mixin() {
+each-mixin() {
     declare -F     \
     | cut -b 12-   \
-    | grep "^arc_" \
+    | grep "^arc-" \
     | cut -b 5-
 }
 
-each_attr() {
+each-attr() {
     local mixin=$2
 
-    mixin=arc_$mixin
+    mixin=arc-$mixin
 
     declare -f $mixin \
     | awk '{ if ($1 == ":") print $2 }'
 }
 
-extract-values() {
+collect-values() {
     local attr=$2
     local mixin=$4
+    local into=$6
 
-    mixin=arc_$mixin
+    mixin=arc-$mixin
 
-    each_value() {
+    each-value() {
         declare -f $mixin                    \
         | perl -pe 's/^\s*: '$attr' /die() {
             for it in "\$@"; do
@@ -138,44 +139,17 @@ extract-values() {
         | bash
     }
 
-    extract_at() {
-        local at=$1
-
-        each_value       \
-        | sed -n "$((at + 1)) p" \
-        | jq -r
-    }
-
-    extract_into() {
-        local into=$1
-
-        while IFS= read -r; do
-            local entry=$(echo "$REPLY" | jq -r)
-            eval "$into+=(${entry@Q})"
-        done <<< "$(each_value)"
-    }
-
-    local tag=$5
-
-    if [[ $tag == "at:" ]]; then
-        local at=$6
-
-        extract_at $at
-    elif [[ $tag == "into:" ]]; then
-        local into=$6
-
-        extract_into $into
-    else
-        echo "Unknown tag '$tag', must be on of: 'at:', 'into:'"
-        exit 1
-    fi
+    while IFS= read -r; do
+        local entry=$(echo "$REPLY" | jq -r)
+        eval "$into+=(${entry@Q})"
+    done <<< "$(each-value)"
 }
 
 #
 # Точка входа
 #
 
-ensure_arc_primary_path_is_set() {
+ensure-arc-primary-path-is-set() {
     local paths=$(which -a arc   \
                   | grep -v "$0" \
                   | grep -v "$(realpath "$0")")
@@ -194,8 +168,8 @@ ensure_arc_primary_path_is_set() {
 }
 
 arc() {
-    if declare -F arc_$1 > /dev/null; then
-        arc_"$@"
+    if declare -F arc-$1 > /dev/null; then
+        arc-"$@"
         return
     fi
 
@@ -203,7 +177,7 @@ arc() {
 }
 
 main() {
-    ensure_arc_primary_path_is_set
+    ensure-arc-primary-path-is-set
 
     arc "$@"
 }
