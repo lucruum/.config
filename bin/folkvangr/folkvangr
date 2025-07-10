@@ -155,10 +155,10 @@ Enabled by default
 =cut
 
 my $help = 0;
-my @operation_search_paths;
+my @operation_search_dirs;
 my %enabled_warnings = ("duplicate-operation" => 1);
 GetOptions "h|help" => \$help,
-           "I=s" => \@operation_search_paths,
+           "I=s" => \@operation_search_dirs,
            "W=s" => sub {
                my ($name, $value) = @_;
                my $disabled = $value =~ s/^no-//;
@@ -167,7 +167,7 @@ GetOptions "h|help" => \$help,
 
 pod2usage -verbose => 99, -sections => ".*" if $help;
 
-foreach (@operation_search_paths) {
+foreach (@operation_search_dirs) {
     fatal "Not a directory: $_" if -e && !-d;
     fatal "No such file or directory: $_" unless -e;
     $_ = abs_path $_;
@@ -194,8 +194,8 @@ my $arcadia_root = $ENV{ARCADIA} ||
 chomp $arcadia_root;
 fatal "Not an arc repository" unless $arcadia_root;
 
-@operation_search_paths = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
-                           @operation_search_paths);
+@operation_search_dirs = ("$arcadia_root/nirvana/vh3/src/vh3/lib",
+                          @operation_search_dirs);
 
 fatal "git: not found" unless can_run "git";
 fatal "make not found" unless can_run "make";
@@ -244,7 +244,7 @@ if ($enabled_warnings{"duplicate-operation"}) {
     find {
         wanted => sub { push @our_operations, $_ if -f $_ && /\.py$/ },
         no_chdir => 1 },
-        @operation_search_paths;
+        @operation_search_dirs;
     my $our_operations = syntax_exec '
         (module
             (decorated_definition
