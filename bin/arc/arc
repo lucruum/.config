@@ -20,6 +20,17 @@ arc-diff() {
     using-external-diff diff "$@"
 }
 
+arc-difft() {
+    ARC_EXTERNAL_DIFF="
+        difft \
+            --graph-limit=$((2 ** 63 - 1)) \
+            --ignore-comments \
+            --override="ya.make:CMake" \
+            --parse-error-limit=$((2 ** 63 - 1)) \
+            --syntax-highlight=off" \
+    arc diff --ext-diff "$@"
+}
+
 arc-log() {
     using-external-diff log "$@"
 }
@@ -51,6 +62,17 @@ arc-show() {
 
 arc-tip() {
     arc command show --git "$@" | delta -s --wrap-max-lines=unlimited
+}
+
+arc-top() {
+    ARC_EXTERNAL_DIFF="
+        difft \
+            --graph-limit=$((2 ** 63 - 1)) \
+            --ignore-comments \
+            --override="ya.make:CMake" \
+            --parse-error-limit=$((2 ** 63 - 1)) \
+            --syntax-highlight=off" \
+    arc show --ext-diff "$@"
 }
 
 #
