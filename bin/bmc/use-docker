@@ -24,6 +24,11 @@ Usage:
 Options:
     -h
         Print a brief help message
+
+Environment:
+    ARCADIA
+        In case the script runs outside of an arc repository, the value of
+        `ARCADIA` will be used to determine the repository location
 EOI
 exit 0
 }
@@ -64,8 +69,13 @@ fatal "For more information refer to the documentation:\n" \
       "    https://docs.yandex-team.ru/qyp/docker-network"
 
 can-run "arc" || fatal "Command not found: arc"
-root=$(arc root)
-(( !$? )) || fatal
+root=$(arc root 2> /dev/null)
+if (( $? )); then
+    [[ -n $ARCADIA ]] || fatal "Not a mounted arc repository. Did you forget to mount arcadia?"
+    [[ -e $ARCADIA ]] || fatal "No such file or directory: $(quote "$ARCADIA") (from \$ARCADIA)"
+    [[ -d $ARCADIA ]] || fatal "Not a directory: $(quote "$ARCADIA") (from \$ARCADIA)"
+    root=$ARCADIA
+fi
 [[ $image =~ ^(cherokee|g2|navajo)$ ]] &&
     path=$root/hwrnd/openbmc_layer ||
     path=$root/hwrnd/openbmc
