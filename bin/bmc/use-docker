@@ -69,7 +69,6 @@ root=$(arc root)
 [[ $image =~ ^(cherokee|g2|navajo)$ ]] &&
     path=$root/hwrnd/openbmc_layer ||
     path=$root/hwrnd/openbmc
-can-run "findmnt" || fatal "Command not found: findmnt"
 can-run "jq" ||
 can-run "ya" && jq() { ya tool jq "$@"; } ||
 fatal "Command not found: jq"
