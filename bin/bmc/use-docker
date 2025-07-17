@@ -15,7 +15,7 @@ quote() {
 usage() {
     cat <<'EOI'
 Usage:
-    use-docker [-h] IMAGE
+    use-docker [-h] MACHINE
 
     A lightweight wrapper for `docker run` that ensures all build requirements
     are installed, mounts the working arc repository, and runs a container in
@@ -53,10 +53,10 @@ while getopts ":h" OPTION; do
     esac
 done
 
-(( $# )) || fatal "Option not specified: IMAGE"
-image=$1; shift
-[[ $image =~ ^(ai1|cherokee|evb2600|g1|g2|gd1|gd2|my62|my81|mz81|mzb2|navajo|som2600v1)$ ]] ||
-fatal "Unknown image value: $(quote "$image")"
+(( $# )) || fatal "Option not specified: MACHINE"
+machine=$1; shift
+[[ $machine =~ ^(ai1|cherokee|evb2600|g1|g2|gd1|gd2|my62|my81|mz81|mzb2|navajo|som2600v1)$ ]] ||
+fatal "Unknown machine value: $(quote "$machine")"
 
 (( !$# )) || fatal "Unexpected option: $(quote "$1")"
 
@@ -76,7 +76,7 @@ if (( $? )); then
     [[ -d $ARCADIA ]] || fatal "Not a directory: $(quote "$ARCADIA") (from \$ARCADIA)"
     root=$ARCADIA
 fi
-[[ $image =~ ^(cherokee|g2|navajo)$ ]] &&
+[[ $machine =~ ^(cherokee|g2|navajo)$ ]] &&
     path=$root/hwrnd/openbmc_layer ||
     path=$root/hwrnd/openbmc
 can-run "jq" ||
@@ -120,4 +120,4 @@ docker run -it \
            -v "/usr/bin/yav:/usr/bin/yav" \
            crops/poky:ubuntu-22.04 \
            --workdir="$path" \
-           sh -c ". ./setup $image; HOME="$path" bash"
+           sh -c ". ./setup $machine; HOME="$path" bash"
