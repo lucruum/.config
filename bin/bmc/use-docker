@@ -110,6 +110,7 @@ can-run "/usr/bin/yav" || fatal "Command not found: /usr/bin/yav"
 [[ -n $YAV_TOKEN ]] || export YAV_TOKEN=$(yav oauth)
 [[ -n $YAV_TOKEN ]] || fatal "Unable to determine YAV token. Please set the YAV_TOKEN environment variable"
 docker run -it \
+           --name=$machine \
            --rm \
            -e ARC_DISABLE_TELEMETRY=1 \
            -e BB_ENV_PASSTHROUGH_ADDITIONS=YAV_TOKEN \
