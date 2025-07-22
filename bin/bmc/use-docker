@@ -120,4 +120,4 @@ docker run -it \
            -v "/usr/bin/yav:/usr/bin/yav" \
            crops/poky:ubuntu-22.04 \
            --workdir="$path" \
-           sh -c ". ./setup $machine; HOME="$path" bash"
+           sh -c '. ./setup '$machine'; HOME=$(pwd) bash'
