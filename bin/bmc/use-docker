@@ -111,14 +111,20 @@ can-run "yav" || fatal "Command not found: yav"
 
 docker run -it \
            --name=$machine \
-           --rm \
+           --rm `
+           # arc внутри контейнера, не разделяющего сеть с хостом,
+           # сыпет ошибками "Error occured while calling helper-daemon"
+           # при включённой телеметрии` \
            -e ARC_DISABLE_TELEMETRY=1 \
+           -v "$(which arc):/usr/bin/arc" \
+           -v "$root:$root" `
+           # Папка $root/.arc является символической ссылкой на $HOME/.arc` \
+           -v "$HOME/.arc:$HOME/.arc" \
+           \
            -e BB_ENV_PASSTHROUGH_ADDITIONS=YAV_TOKEN \
            -e YAV_TOKEN=$YAV_TOKEN \
-           -v "$(which arc):/usr/bin/arc" \
            -v "$(which yav):/usr/bin/yav" \
-           -v "$HOME/.arc:$HOME/.arc" \
-           -v "$root:$root" \
+           \
            crops/poky:ubuntu-22.04 \
            --workdir="$path" \
            sh -c '. ./setup '$machine'; HOME=$(pwd) bash'
