@@ -105,20 +105,20 @@ rm ".gitignore"
 rm ".gitreview"
 rm -rd ".github/" )
 
-can-run "/usr/bin/arc" || fatal "Command not found: /usr/bin/arc"
-can-run "/usr/bin/yav" || fatal "Command not found: /usr/bin/yav"
+can-run "yav" || fatal "Command not found: yav"
 [[ -n $YAV_TOKEN ]] || export YAV_TOKEN=$(yav oauth)
 [[ -n $YAV_TOKEN ]] || fatal "Unable to determine YAV token. Please set the YAV_TOKEN environment variable"
+
 docker run -it \
            --name=$machine \
            --rm \
            -e ARC_DISABLE_TELEMETRY=1 \
            -e BB_ENV_PASSTHROUGH_ADDITIONS=YAV_TOKEN \
            -e YAV_TOKEN=$YAV_TOKEN \
+           -v "$(which arc):/usr/bin/arc" \
+           -v "$(which yav):/usr/bin/yav" \
            -v "$HOME/.arc:$HOME/.arc" \
            -v "$root:$root" \
-           -v "/usr/bin/arc:/usr/bin/arc" \
-           -v "/usr/bin/yav:/usr/bin/yav" \
            crops/poky:ubuntu-22.04 \
            --workdir="$path" \
            sh -c '. ./setup '$machine'; HOME=$(pwd) bash'
