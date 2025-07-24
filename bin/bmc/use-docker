@@ -83,9 +83,11 @@ can-run "jq" ||
 can-run "ya" && jq() { ya tool jq "$@"; } ||
 fatal "Command not found: jq"
 findmnt -JT "$path" |
-jq -r '.filesystems[] |
-        select(.source == "arc" and .target == "'$root'") |
-        .options' |
+jq -r \
+   --arg root "$root" \
+   '.filesystems[] |
+   select(.source == "arc" and .target == $root) |
+   .options' |
 grep -qw -e "allow_other" -e "allow_root" ||
 fatal "Directory $(quote "$path") is inaccessible from within a Docker container " \
       "because it is mounted under $(quote "$root"), " \
