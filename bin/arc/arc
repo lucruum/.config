@@ -4,16 +4,12 @@
 # Примеси
 #
 
-arc-command() {
-    "$ARC" "$@"
-}
-
 arc-cane() {
     arc ci -a --amend --no-edit
 }
 
 arc-delta() {
-    arc command diff --git "$@" | delta -s --wrap-max-lines=unlimited
+    arc diff --git "$@" | delta -s --wrap-max-lines=unlimited
 }
 
 arc-diff() {
@@ -29,7 +25,7 @@ arc-difft() {
             --override="ya.make:CMake" \
             --parse-error-limit=$((2 ** 63 - 1)) \
             --syntax-highlight=off" \
-    arc diff --ext-diff "$@"
+    arc-diff --ext-diff "$@"
 }
 
 arc-log() {
@@ -72,7 +68,7 @@ arc-show() {
 }
 
 arc-tip() {
-    arc command show --git "$@" | delta -s --wrap-max-lines=unlimited
+    arc show --git "$@" | delta -s --wrap-max-lines=unlimited
 }
 
 arc-top() {
@@ -84,7 +80,7 @@ arc-top() {
             --override="ya.make:CMake" \
             --parse-error-limit=$((2 ** 63 - 1)) \
             --syntax-highlight=off" \
-    arc show --ext-diff "$@"
+    arc-show --ext-diff "$@"
 }
 
 #
@@ -92,7 +88,7 @@ arc-top() {
 #
 
 using-external-diff() {
-    perl - arc command "$@" <<'EOI'
+    perl - arc "$@" <<'EOI'
         use strict;
         use warnings;
 
@@ -255,15 +251,6 @@ EOI
 # Точка входа
 #
 
-arc() {
-    if declare -F arc-$1 > /dev/null; then
-        arc-"$@"
-        return
-    fi
-
-    arc command "$@"
-}
-
 export ARC=$(which -a arc | grep -v "$(realpath "$0")" | head -1)
 if [[ -z "$ARC" ]]; then
     echo "arc: command not found"
@@ -271,4 +258,8 @@ if [[ -z "$ARC" ]]; then
     exit 1
 fi
 
-arc "$@"
+if declare -F arc-$1 > /dev/null; then
+    arc-"$@"
+else
+    "$ARC" "$@"
+fi
