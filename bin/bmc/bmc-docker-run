@@ -15,7 +15,7 @@ quote() {
 usage() {
     cat <<'EOI'
 Usage:
-    use-docker [-h] MACHINE
+    bmc-docker-run [-h] MACHINE
 
     A lightweight wrapper for `docker run` that ensures all build requirements
     are installed, mounts the working arc repository, and runs a container in
