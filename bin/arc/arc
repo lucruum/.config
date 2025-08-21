@@ -147,7 +147,7 @@ using-external-diff() {
                 dup2 fileno $output, fileno STDOUT or die "dup2: $!";
                 close $output or die "close: $!";
                 # Не стоит удивляться тому, что вывод не раскрашен: флаг не работает
-                splice @ARGV, 3, 0, "--color=always" if $paging;
+                splice @ARGV, 2, 0, "--color=always" if $paging;
                 exec @ARGV or die "exec: $!";
             }
             dup2 fileno $input, fileno STDIN or die "dup2: $!";
