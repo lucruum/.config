@@ -55,7 +55,7 @@ done
 
 (( $# )) || fatal "Option not specified: MACHINE"
 machine=$1; shift
-[[ $machine =~ ^(ai1|cherokee|evb2600|g1|g2|gd1|gd2|my62|my81|mz81|mzb2|navajo|som2600v1)$ ]] ||
+[[ $machine =~ ^(cherokee|g2|navajo)$ ]] ||
 fatal "Unknown machine value: $(quote "$machine")"
 
 (( !$# )) || fatal "Unexpected option: $(quote "$1")"
@@ -76,9 +76,7 @@ if (( $? )); then
     [[ -d $ARCADIA ]] || fatal "Not a directory: $(quote "$ARCADIA") (from \$ARCADIA)"
     root=$ARCADIA
 fi
-[[ $machine =~ ^(cherokee|g2|navajo)$ ]] &&
-    path=$root/hwrnd/openbmc_layer ||
-    path=$root/hwrnd/openbmc
+path=$root/hwrnd/openbmc_layer
 can-run "jq" ||
 can-run "ya" && jq() { ya tool jq "$@"; } ||
 fatal "Command not found: jq"
