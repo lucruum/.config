@@ -6,10 +6,23 @@ can-run() {
 
 fatal() {
     for it; do
-        echo -en "$it" >&2
+        echo -e "$it" >&2
     done
-    (( $# )) && echo >&2
     exit 1
+}
+
+getopt() {
+    local stderr=$(command getopt "$@" 2>&1 > /dev/null)
+    echo "$stderr" |
+    while IFS= read -r; do
+        [[ $REPLY =~ ^getopt:\ option\ \'(.*)\'\ is\ ambiguous ]] && echo "Option is ambiguous: $(quote "${BASH_REMATCH[1]}")" >&2
+        [[ $REPLY =~ ^getopt:\ unrecognized\ option\ \'(.*)\'$ ]] && echo "Invalid option: $(quote "${BASH_REMATCH[1]}")" >&2
+        [[ $REPLY =~ ^getopt:\ option\ \'(.*)\'\ doesn\'t\ allow\ an\ argument$ ]] && echo "Option does not allow an argument: $(quote "${BASH_REMATCH[1]}")" >&2
+        [[ $REPLY =~ ^getopt:\ option\ \'(.*)\'\ requires\ an\ argument$ ]] && echo "Option requires an argument: $(quote "${BASH_REMATCH[1]}")" >&2
+        [[ $REPLY =~ ^getopt:\ invalid\ option\ --\ \'(.)\'$ ]] && echo "Invalid option: -${BASH_REMATCH[1]}" >&2
+    done
+    [[ -n $stderr ]] && return 1
+    command getopt "$@"
 }
 
 quote() {
@@ -26,15 +39,15 @@ quote() {
 
 usage() {
     cat <<'EOI'
+A lightweight wrapper for `docker run` that ensures all build requirements are
+installed, mounts the working arc repository, and runs a container in the proper
+environment
+
 Usage:
     bmc-docker-run [-h] MACHINE
 
-    A lightweight wrapper for `docker run` that ensures all build requirements
-    are installed, mounts the working arc repository, and runs a container in
-    the proper environment
-
 Options:
-    -h
+    -h, --help
         Print a brief help message
 
 Environment:
@@ -45,30 +58,39 @@ EOI
 exit 0
 }
 
-while getopts ":h" OPTION; do
-    case $OPTION in
-        h) usage;;
-        :) fatal "Option requires an argument: $OPTARG";;
-        ?) fatal "Unknown option: $OPTARG";;
+ARGV=$(getopt -o h -l help -- "$@")
+(( !$? )) || fatal
+eval set -- "$ARGV"
+
+while true; do
+    case $1 in
+        -h|--help)
+            usage;;
+        --)
+            shift
+            break;;
     esac
 done
 
-(( $# )) || fatal "Option not specified: MACHINE"
+(( $# )) || fatal "Missing operand: MACHINE"
 machine=$1; shift
 [[ $machine =~ ^(cherokee|g2|navajo)$ ]] ||
-fatal "Unknown machine value: $(quote "$machine")"
+fatal "Invalid machine value: $(quote "$machine")"
 
-(( !$# )) || fatal "Unexpected option: $(quote "$1")"
+(( !$# )) || fatal "Extra operand: $(quote "$1")"
 
 can-run "docker" || fatal "Command not found: docker"
 docker ps > /dev/null ||
-fatal "For more information refer to the documentation:\n" \
-      "    https://docs.docker.com/engine/install/linux-postinstall"
+fatal "Non-root access to Docker is not granted." \
+      "See https://docs.docker.com/engine/install/linux-postinstall for details"
 docker run -it --rm busybox sh -c 'ping -c1 -w1 ya.ru > /dev/null' 2> /dev/null ||
-fatal "For more information refer to the documentation:\n" \
-      "    https://docs.yandex-team.ru/qyp/docker-network"
+fatal "Docker in QYP cannot send requests to the external network by default." \
+      "See https://docs.yandex-team.ru/qyp/docker-network for details"
 
-can-run "arc" || fatal "Command not found: arc"
+can-run "arc" ||
+fatal "Command not found: arc." \
+      "See https://docs.yandex-team.ru/devtools/intro/quick-start-guide#arc-setup for details"
+
 root=$(arc root 2> /dev/null)
 if (( $? )); then
     [[ -n $ARCADIA ]] || fatal "Not a mounted arc repository. Did you forget to mount arcadia?"
@@ -87,10 +109,10 @@ jq -r \
    select(.source == "arc" and .target == $root) |
    .options' |
 grep -qw -e "allow_other" -e "allow_root" ||
-fatal "Directory $(quote "$path") is inaccessible from within a Docker container " \
-      "because it is mounted under $(quote "$root"), " \
-      "which lacks the necessary permissions for other users to access files via FUSE.\n" \
-      "Consider remounting $(quote "$root") using the following commands:\n" \
+fatal "Directory $(quote "$path") is inaccessible from within a Docker container" \
+      "because it is mounted under $(quote "$root")," \
+      "which lacks the necessary permissions for other users to access files via FUSE." \
+      "Consider remounting $(quote "$root") using the following commands:" \
       "    \$ arc unmount $(quote "$root") && arc mount --allow-other $(quote "$root")"
 
 can-run "git" || fatal "Command not found: git"
@@ -105,9 +127,13 @@ rm ".gitignore"
 rm ".gitreview"
 rm -rd ".github/" )
 
-can-run "yav" || fatal "Command not found: yav"
+can-run "yav" ||
+fatal "Command not found: yav." \
+      "See https://docs.yandex-team.ru/yav-api/cli/install for details"
 [[ -n $YAV_TOKEN ]] || export YAV_TOKEN=$(yav oauth)
-[[ -n $YAV_TOKEN ]] || fatal "Unable to determine YAV token. Please set the YAV_TOKEN environment variable"
+[[ -n $YAV_TOKEN ]] ||
+fatal "Unable to determine YAV token." \
+      "Please set the YAV_TOKEN environment variable"
 
 docker run -it \
            --name=$machine \
