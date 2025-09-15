@@ -84,6 +84,17 @@ fatal "Directory $(quote "$path") is inaccessible from within a Docker container
       "Consider remounting $(quote "$root") using the following commands:" \
       "    \$ arc unmount $(quote "$root") && arc mount --allow-other $(quote "$root")"
 
+can-run "yav" ||
+fatal "Command not found: yav." \
+      "See https://docs.yandex-team.ru/yav-api/cli/install for details"
+[[ -n $YAV_TOKEN ]] || export YAV_TOKEN=$(yav oauth)
+[[ -n $YAV_TOKEN ]] ||
+fatal "Unable to determine YAV token." \
+      "Please set the YAV_TOKEN environment variable"
+yav list secrets &> /dev/null ||
+fatal "Invalid OAuth token" \
+      "See https://docs.yandex-team.ru/blackbox/methods/oauth#status for details"
+
 can-run "git" || fatal "Command not found: git"
 ( cd "$path"
 upstream=$(cat upstream_hash)
@@ -95,14 +106,6 @@ rm ".eslintrc.json"
 rm ".gitignore"
 rm ".gitreview"
 rm -rd ".github/" )
-
-can-run "yav" ||
-fatal "Command not found: yav." \
-      "See https://docs.yandex-team.ru/yav-api/cli/install for details"
-[[ -n $YAV_TOKEN ]] || export YAV_TOKEN=$(yav oauth)
-[[ -n $YAV_TOKEN ]] ||
-fatal "Unable to determine YAV token." \
-      "Please set the YAV_TOKEN environment variable"
 
 docker run -it \
            --name=$machine \
