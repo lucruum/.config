@@ -13,7 +13,7 @@ installed, mounts the working arc repository, and runs a container in the proper
 environment
 
 Usage:
-    bmc-docker-run [-h] MACHINE
+    bmc-env-setup [-h] MACHINE
 
 Options:
     -h, --help
