@@ -23,6 +23,10 @@ Environment:
     ARCADIA
         In case the script runs outside of an arc repository, the value of
         `ARCADIA` will be used to determine the repository location
+
+    YAV_TOKEN
+        The OAuth token utilized for authorization in YAV. If not provided, the
+        default value will be sourced from `$(yav oauth)`
 EOI
 exit 0
 }
@@ -87,6 +91,7 @@ fatal "Directory $(quote "$path") is inaccessible from within a Docker container
 can-run "yav" ||
 fatal "Command not found: yav." \
       "See https://docs.yandex-team.ru/yav-api/cli/install for details"
+
 [[ -n $YAV_TOKEN ]] || export YAV_TOKEN=$(yav oauth)
 [[ -n $YAV_TOKEN ]] ||
 fatal "Unable to determine YAV token." \
