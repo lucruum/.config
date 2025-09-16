@@ -112,9 +112,16 @@ rm ".gitignore"
 rm ".gitreview"
 rm -rd ".github/" )
 
+if [[ $machine =~ ^(cherokee|navajo)$ ]]; then
+    TEMPLATECONF=$path/meta-yandex-only/meta-$machine/conf/templates/default
+elif [[ $machine == g2 ]]; then
+    TEMPLATECONF=$path/meta-yandex-shared/meta-g2/conf/templates/default
+fi
+
 docker run -it \
            --name=$machine \
            --rm `
+           \
            # arc внутри контейнера, не разделяющего сеть с хостом,
            # сыпет ошибками "Error occured while calling helper-daemon"
            # при включённой телеметрии` \
@@ -130,4 +137,4 @@ docker run -it \
            \
            crops/poky:ubuntu-22.04 \
            --workdir="$path" \
-           sh -c '. ./setup '$machine'; HOME=$(pwd) bash'
+           sh -c 'TEMPLATECONF='$(quote "$TEMPLATECONF")' . ./oe-init-build-env build/'$machine'; HOME=$(pwd) bash'
