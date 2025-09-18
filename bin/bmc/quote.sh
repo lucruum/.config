@@ -1,11 +1,11 @@
 quote() {
     if [[ -z $1 ]]; then
-        echo -n "''"
+        printf "%s" "''"
     elif [[ $1 =~ [^+,\-./:=@_^[:alnum:]] ]]; then
-        echo -n "'"
-        echo -n "$1" | sed -E 's/(['"'"'!])/'"'"'\\\1'"'"'/g'
-        echo -n "'"
+        printf "%s" "'"
+        printf "%s" "$1" | sed -E 's/(['"'"'!])/'"'"'\\\1'"'"'/g'
+        printf "%s" "'"
     else
-        echo -n "$1"
+        printf "%s" "$1"
     fi
 }
