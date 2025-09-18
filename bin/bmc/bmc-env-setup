@@ -15,6 +15,11 @@ environment
 Usage:
     bmc-env-setup [-h] MACHINE
 
+Arguments:
+    MACHINE
+        Fifth generation target hardware. The possible values are "cherokee",
+        "g2" and "navajo"
+
 Options:
     -h, --help
         Print a brief help message
