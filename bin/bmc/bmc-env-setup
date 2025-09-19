@@ -13,12 +13,17 @@ installed, mounts the working arc repository, and runs a container in the proper
 environment
 
 Usage:
-    bmc-env-setup [-h] MACHINE
+    bmc-env-setup [-h] MACHINE [BUILD]
 
 Arguments:
     MACHINE
         Fifth generation target hardware. The possible values are "cherokee",
         "g2" and "navajo"
+
+    BUILD
+        Explicitly specify a build directory. If no directory is provided,
+        "{OEROOT}/build" will be used by default, where `OEROOT` is the
+        directory from which the top-level `oe-init-build-env` script is sourced
 
 Options:
     -h, --help
@@ -55,6 +60,13 @@ machine=$1; shift
 [[ $machine =~ ^(cherokee|g2|navajo)$ ]] ||
 fatal "Invalid machine value: $(quote "$machine")"
 
+if (( $# )); then
+    build=$1; shift
+    [[ -e $build ]] || mkdir -p "$build"
+    [[ -d $build ]] || fatal "Not a directory: $(quote "$build")"
+    build=$(realpath -m "$build")
+fi
+
 (( !$# )) || fatal "Extra operand: $(quote "$1")"
 
 can-run "docker" || fatal "Command not found: docker"
@@ -69,29 +81,33 @@ can-run "arc" ||
 fatal "Command not found: arc." \
       "See https://docs.yandex-team.ru/devtools/intro/quick-start-guide#arc-setup for details"
 
-root=$(arc root 2> /dev/null)
+arcadia=$(arc root 2> /dev/null)
 if (( $? )); then
     [[ -n $ARCADIA ]] || fatal "Not a mounted arc repository. Did you forget to mount arcadia?"
     [[ -e $ARCADIA ]] || fatal "No such file or directory: $(quote "$ARCADIA") (from \$ARCADIA)"
     [[ -d $ARCADIA ]] || fatal "Not a directory: $(quote "$ARCADIA") (from \$ARCADIA)"
-    root=$ARCADIA
+    arcadia=$ARCADIA
 fi
-path=$root/hwrnd/openbmc_layer
-can-run "jq" ||
-can-run "ya" && jq() { ya tool jq "$@"; } ||
-fatal "Command not found: jq"
-findmnt -JT "$path" |
-jq -r \
-   --arg root "$root" \
-   '.filesystems[] |
-   select(.source == "arc" and .target == $root) |
-   .options' |
-grep -qw -e "allow_other" -e "allow_root" ||
-fatal "Directory $(quote "$path") is inaccessible from within a Docker container" \
-      "because it is mounted under $(quote "$root")," \
-      "which lacks the necessary permissions for other users to access files via FUSE." \
-      "Consider remounting $(quote "$root") using the following commands:" \
-      "    \$ arc unmount $(quote "$root") && arc mount --allow-other $(quote "$root")"
+
+root=$arcadia/hwrnd/openbmc_layer
+
+[[ -n $build ]] || build=$root/build
+if [[ $build =~ $arcadia/* ]]; then
+    can-run "ya" && jq() { ya tool jq "$@"; } ||
+    fatal "Command not found: jq"
+    findmnt -JT "$root" |
+    jq -r \
+       --arg arcadia "$arcadia" \
+       '.filesystems[] |
+       select(.source == "arc" and .target == $arcadia) |
+       .options' |
+    grep -qw -e "allow_other" -e "allow_root" ||
+    fatal "Directory $(quote "$build") is inaccessible from within a Docker container" \
+          "because it is mounted under $(quote "$arcadia")," \
+          "which lacks the necessary permissions for other users to access files via FUSE." \
+          "Consider remounting $(quote "$arcadia") using the following commands:" \
+          "    \$ arc unmount $(quote "$arcadia") && arc mount --allow-other $(quote "$arcadia")"
+fi
 
 can-run "yav" ||
 fatal "Command not found: yav." \
@@ -106,7 +122,7 @@ fatal "Invalid OAuth token" \
       "See https://docs.yandex-team.ru/blackbox/methods/oauth#status for details"
 
 can-run "git" || fatal "Command not found: git"
-( cd "$path"
+( cd "$root"
 upstream=$(cat upstream_hash)
 git rev-parse --is-inside-work-tree &> /dev/null || git init
 git remote | grep -qx "origin" || git remote add origin "https://github.com/openbmc/openbmc.git"
@@ -118,9 +134,9 @@ rm ".gitreview"
 rm -rd ".github/" )
 
 if [[ $machine =~ ^(cherokee|navajo)$ ]]; then
-    TEMPLATECONF=$path/meta-yandex-only/meta-$machine/conf/templates/default
+    TEMPLATECONF=$root/meta-yandex-only/meta-$machine/conf/templates/default
 elif [[ $machine == g2 ]]; then
-    TEMPLATECONF=$path/meta-yandex-shared/meta-g2/conf/templates/default
+    TEMPLATECONF=$root/meta-yandex-shared/meta-g2/conf/templates/default
 fi
 
 docker run -it \
@@ -132,7 +148,7 @@ docker run -it \
            # при включённой телеметрии` \
            -e ARC_DISABLE_TELEMETRY=1 \
            -v "$(which arc):/usr/bin/arc" \
-           -v "$root:$root" `
+           -v "$arcadia:$arcadia" `
            # Папка $root/.arc является символической ссылкой на $HOME/.arc` \
            -v "$HOME/.arc:$HOME/.arc" \
            \
@@ -140,6 +156,8 @@ docker run -it \
            -e YAV_TOKEN=$YAV_TOKEN \
            -v "$(which yav):/usr/bin/yav" \
            \
+           -v "$build:$build" \
            crops/poky:ubuntu-22.04 \
-           --workdir="$path" \
-           sh -c 'TEMPLATECONF='$(quote "$TEMPLATECONF")' . ./oe-init-build-env build/'$machine'; HOME=$(pwd) bash'
+           --workdir="$root" \
+           sh -c 'TEMPLATECONF='$(quote "$TEMPLATECONF")' . ./oe-init-build-env '$(quote "$build")/$machine'
+                  HOME=$(pwd) bash'
