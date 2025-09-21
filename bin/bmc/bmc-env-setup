@@ -29,6 +29,9 @@ Options:
     -h, --help
         Print a brief help message
 
+    -n, --name=NAME
+        Assign a name to the container
+
 Environment:
     ARCADIA
         In case the script runs outside of an arc repository, the value of
@@ -41,7 +44,7 @@ EOI
 exit 0
 }
 
-ARGV=$(getopt -o h -l help -- "$@")
+ARGV=$(getopt -o hn: -l help,name: -- "$@")
 (( !$? )) || fatal
 eval set -- "$ARGV"
 
@@ -49,6 +52,9 @@ while true; do
     case $1 in
         -h|--help)
             usage;;
+        -n|--name)
+            name=$2
+            shift 2;;
         --)
             shift
             break;;
@@ -59,6 +65,10 @@ done
 machine=$1; shift
 [[ $machine =~ ^(cherokee|g2|navajo)$ ]] ||
 fatal "Invalid machine value: $(quote "$machine")"
+
+[[ -n $name ]] || name=$machine
+[[ $name =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] ||
+fatal "Invalid name value: $(quote "$name")"
 
 if (( $# )); then
     build=$1; shift
@@ -109,6 +119,12 @@ if [[ $build =~ $arcadia/* ]]; then
           "    \$ arc unmount $(quote "$arcadia") && arc mount --allow-other $(quote "$arcadia")"
 fi
 
+docker ps --format=json |
+jq -r '.Names' |
+grep -qx "$name" &&
+fatal "The container name \`$name\` is already in use" \
+      "Provide a unique container name using the \`--name\` option"
+
 can-run "yav" ||
 fatal "Command not found: yav." \
       "See https://docs.yandex-team.ru/yav-api/cli/install for details"
@@ -140,7 +156,7 @@ elif [[ $machine == g2 ]]; then
 fi
 
 docker run -it \
-           --name=$machine \
+           --name=$name \
            --rm `
            \
            # arc внутри контейнера, не разделяющего сеть с хостом,
