@@ -170,10 +170,18 @@ docker run -it \
            \
            -e BB_ENV_PASSTHROUGH_ADDITIONS=YAV_TOKEN \
            -e YAV_TOKEN=$YAV_TOKEN \
-           -v "$(which yav):/usr/bin/yav" \
+           -v "$(which yav):/usr/bin/yav" `
            \
+           # Переменные OEROOT, BUILDDIR и TEMPLATECONF нужны для правильного
+           # выполнения bmc-env-exec:
+           #   - oe-init-build-env unset'ит OEROOT в конце выполнения,
+           #     поэтому никакого эффекта на контейнер переменная не окажет \
+           #   - BUILDDIR и TEMPLATECONF инициализируются самим oe-init-build-env` \
+           -e OEROOT="$root" \
+           -e BUILDDIR="$build" \
+           -e TEMPLATECONF="$TEMPLATECONF" \
            -v "$build:$build" \
            crops/poky:ubuntu-22.04 \
            --workdir="$root" \
-           sh -c 'TEMPLATECONF='$(quote "$TEMPLATECONF")' . ./oe-init-build-env '$(quote "$build")/$machine'
+           sh -c '. ./oe-init-build-env '$(quote "$build")/$machine'
                   HOME=$(pwd) bash'
