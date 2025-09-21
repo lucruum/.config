@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+
+__DIR__=$(dirname -- "$0")
+. "$__DIR__"/can-run.sh
+. "$__DIR__"/fatal.sh
+. "$__DIR__"/getopt.sh
+. "$__DIR__"/quote.sh
+
+usage() {
+    cat <<'EOI'
+A lightweight wrapper for `docker exec` that runs a command into a container in
+the proper environment
+
+Usage:
+    bmc-env-exec [-h] CONTAINER COMMAND [ARGUMENT]...
+
+Arguments:
+    CONTAINER
+        The name of a container that was created using the `bmc-env-setup`
+        command
+
+    COMMAND
+        Execute `COMMAND` with the `ARGUMENT`s into the `CONTAINER`
+
+Options:
+    -h, --help
+        Print a brief help message
+EOI
+exit 0
+}
+
+ARGV=$(getopt -o h -l help -- "$@")
+(( !$? )) || fatal
+eval set -- "$ARGV"
+
+while true; do
+    case $1 in
+        -h|--help)
+            usage;;
+        --)
+            shift
+            break;;
+    esac
+done
+
+(( $# )) || fatal "Missing operand: CONTAINER"
+container=$1; shift
+can-run "docker" || fatal "Command not found: docker"
+can-run "ya" && jq() { ya tool jq "$@"; } ||
+fatal "Command not found: jq"
+docker ps --format=json |
+jq -r '.Names' |
+grep -qx "$container" ||
+fatal "Invalid container value: $(quote "$container")"
+
+(( $# )) || fatal "Missing operand: COMMAND"
+kommand=$1; shift
+
+ARGV=""
+for it; do
+    [[ -n $ARGV ]] && ARGV+=" "
+    ARGV+=$(quote "$it")
+done
+
+docker exec -u pokyuser $container bash -c '
+    cd "$BUILDDIR"
+    machine=$(echo "$TEMPLATECONF" | rev | cut -d/ -f4 | rev | cut -d- -f2)
+    . "$OEROOT/oe-init-build-env" "$BUILDDIR"/$machine > /dev/null
+    unset machine
+    HOME=$(pwd)
+    '$(quote "$kommand")' '"$ARGV"''
