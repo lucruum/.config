@@ -88,7 +88,7 @@ arc-top() {
 #
 
 using-external-diff() {
-    perl - arc "$@" <<'EOI'
+    perl - "$ARC" "$@" <<'EOI'
         use strict;
         use warnings;
 
