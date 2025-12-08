@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 #
 # Примеси
 #
@@ -21,8 +23,8 @@ arc-difft() {
         difft \
             --graph-limit=$((2 ** 63 - 1)) \
             --ignore-comments \
-            --override="*.yql:SQL" \
-            --override="ya.make:CMake" \
+            --override=\"*.yql:SQL\" \
+            --override=\"ya.make:CMake\" \
             --parse-error-limit=$((2 ** 63 - 1)) \
             --syntax-highlight=off" \
     arc-diff --ext-diff "$@"
@@ -33,33 +35,33 @@ arc-log() {
 }
 
 arc-drop() {
-    local commit=$1
+    if (( $# )); then
+        local commit=$1
 
-    if [[ -z $commit ]]; then
-        arc reset --hard HEAD~
-    else
         ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/drop/"' \
-        arc rebase -i $commit~
+        arc rebase -i "$commit"~
+    else
+        arc reset --hard HEAD~
     fi
 }
 
 arc-edit() {
-    local commit=$1
+    if (( $# )); then
+        local commit=$1
 
-    if [[ -n $commit ]]; then
         ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/edit/"' \
-        arc rebase -i $commit~
+        arc rebase -i "$commit"~
     fi
 }
 
 arc-reword() {
-    local commit=$1
+    if (( $# )); then
+        local commit="$1"
 
-    if [[ -z $commit ]]; then
-        arc commit --amend
-    else
         ARC_SEQUENCE_EDITOR='sed -i "1 s/pick/reword/"' \
-        arc rebase -i $commit~
+        arc rebase -i "$commit"~
+    else
+        arc commit --amend
     fi
 }
 
@@ -76,8 +78,8 @@ arc-top() {
         difft \
             --graph-limit=$((2 ** 63 - 1)) \
             --ignore-comments \
-            --override="*.yql:SQL" \
-            --override="ya.make:CMake" \
+            --override=\"*.yql:SQL\" \
+            --override=\"ya.make:CMake\" \
             --parse-error-limit=$((2 ** 63 - 1)) \
             --syntax-highlight=off" \
     arc-show --ext-diff "$@"
@@ -251,15 +253,15 @@ EOI
 # Точка входа
 #
 
-export ARC=$(which -a arc | grep -v "$(realpath "$0")" | head -1)
+ARC=$(which -a arc | grep -v "$(realpath "$0")" | head -1)
 if [[ -z "$ARC" ]]; then
     echo "arc: command not found"
     echo "Consider visiting documentation page at 'https://docs.yandex-team.ru/devtools/intro/quick-start-guide' for more details"
     exit 1
 fi
 
-if declare -F arc-$1 > /dev/null; then
-    arc-"$@"
-else
-    "$ARC" "$@"
-fi
+(( $# )) || exec "$ARC"
+declare -F arc-"$1" > /dev/null || exec "$ARC" "$@"
+mixin=$1
+shift
+arc-"$mixin" "$@"
